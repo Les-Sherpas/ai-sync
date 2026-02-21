@@ -2,15 +2,15 @@
 """Sync AI configs (agents, skills, MCP servers, client config) to Codex, Cursor, Gemini."""
 import argparse
 import json
+import os
 import re
 import shutil
 import subprocess
-import sys
-import os
 from pathlib import Path
 
 import yaml
 
+from clients import CLIENTS
 from helpers import (
     backup_context,
     copy_file_if_different,
@@ -18,9 +18,7 @@ from helpers import (
     extract_description,
     sync_tree_if_different,
     to_kebab_case,
-    write_content_if_different,
 )
-from clients import CLIENTS
 
 # --- Constants ---
 _SCRIPT_DIR = Path(__file__).resolve().parent
@@ -137,7 +135,11 @@ def _check_client_versions(versions_path: Path) -> tuple[bool, str]:
         if not exp_match or not cur_match:
             return False, f"Invalid version for {client} (expected {expected_version}, got {current[client]})"
         if exp_match.group(1, 2) != cur_match.group(1, 2):
-            return False, f"Version mismatch: {client} expected {exp_match.group(1)}.{exp_match.group(2)}.x got {current[client]}"
+            return (
+                False,
+                f"Version mismatch: {client} expected {exp_match.group(1)}.{exp_match.group(2)}.x "
+                f"got {current[client]}",
+            )
     return True, "OK"
 
 
@@ -318,7 +320,21 @@ def main() -> int:
         action="store_true",
         help="Force sync and overwrite scripts/.client-versions.json with local client versions.",
     )
+    parser.add_argument(
+        "--clear",
+        action="store_true",
+        help="Clear completely the agents, skills, and MCP servers in the clients' folders.",
+    )
     args = parser.parse_args()
+
+    if args.clear:
+        print("--- Clearing Client Configs ---")
+        with backup_context(BACKUP_ROOT_PATH):
+            for client in CLIENTS:
+                print(f"Clearing for {client.name}...")
+                client.clear()
+        print("--- Clear Complete ---")
+        return 0
 
     if args.capture_oauth:
         with backup_context(BACKUP_ROOT_PATH):

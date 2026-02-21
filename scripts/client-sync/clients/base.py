@@ -46,6 +46,27 @@ class Client(ABC):
         """Apply generic settings.yaml to this client's config."""
         ...
 
+    def clear(self) -> None:
+        """Clear agents, skills, and settings from this client."""
+        self.clear_agents()
+        self.clear_skills()
+        self.clear_settings()
+
+    @abstractmethod
+    def clear_agents(self) -> None:
+        """Clear agents from this client."""
+        ...
+
+    @abstractmethod
+    def clear_skills(self) -> None:
+        """Clear skills from this client."""
+        ...
+
+    @abstractmethod
+    def clear_settings(self) -> None:
+        """Clear settings/MCP servers config for this client."""
+        ...
+
     def get_oauth_src_path(self) -> Path | None:
         """Path to OAuth token cache on client (for capture). None if not supported."""
         return None
@@ -53,3 +74,7 @@ class Client(ABC):
     def get_oauth_stash_filename(self) -> str | None:
         """Filename in config/mcp-servers/secrets/ for captured OAuth cache. None if not supported."""
         return None
+
+    def enable_subagents_fallback(self) -> None:
+        """Enable experimental subagents when settings.yaml is absent. Fallback only."""
+        pass

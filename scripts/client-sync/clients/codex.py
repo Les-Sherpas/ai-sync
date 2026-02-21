@@ -1,18 +1,18 @@
 """Codex client adapter."""
-import json
 from collections.abc import Callable
 from pathlib import Path
 
 import tomli
 import tomli_w
 
-from .base import Client
 from helpers import (
+    copy_file_if_different,
     deep_merge,
     ensure_dir,
     write_content_if_different,
-    copy_file_if_different,
 )
+
+from .base import Client
 
 
 class CodexClient(Client):
@@ -142,6 +142,38 @@ web_search = "{web_search_val}"
             write_content_if_different(config_path, tomli_w.dumps(merged), backup=False)
         except (OSError, tomli.TOMLDecodeError) as e:
             print(f"  Warning: Could not update Codex client config: {e}")
+
+    def clear_agents(self) -> None:
+        import shutil
+        agents_dir = self.get_agents_dir()
+        if agents_dir.exists():
+            shutil.rmtree(agents_dir)
+            print(f"    Cleared agents: {agents_dir}")
+
+    def clear_skills(self) -> None:
+        import shutil
+        skills_dir = self.get_skills_dir()
+        if skills_dir.exists():
+            shutil.rmtree(skills_dir)
+            print(f"    Cleared skills: {skills_dir}")
+
+    def clear_settings(self) -> None:
+        config_path = self.config_dir / "config.toml"
+        if config_path.exists():
+            try:
+                with open(config_path, "rb") as f:
+                    existing = tomli.load(f)
+                if "mcp_servers" in existing:
+                    del existing["mcp_servers"]
+                    write_content_if_different(config_path, tomli_w.dumps(existing), backup=False)
+                    print(f"    Cleared MCP servers from {config_path}")
+            except (OSError, tomli.TOMLDecodeError) as e:
+                print(f"  Warning: Could not clear MCP from Codex config: {e}")
+
+        mcp_env_path = self.config_dir / "mcp.env"
+        if mcp_env_path.exists():
+            mcp_env_path.unlink()
+            print(f"    Deleted {mcp_env_path}")
 
     def get_oauth_src_path(self) -> Path | None:
         return self.config_dir / "auth.json"

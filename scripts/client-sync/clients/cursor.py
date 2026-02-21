@@ -2,8 +2,9 @@
 import json
 from pathlib import Path
 
-from .base import Client
 from helpers import deep_merge, ensure_dir, write_content_if_different
+
+from .base import Client
 
 
 class CursorClient(Client):
@@ -78,7 +79,12 @@ is_background: {is_background}
     def _build_client_config(self, settings: dict) -> dict:
         mode = settings.get("mode", "ask")
         if mode == "full-access":
-            return {"permissions": {"allow": ["Shell(*)", "Read(*)", "Write(*)", "WebFetch(*)", "Mcp(*:*)"], "deny": []}}
+            return {
+                "permissions": {
+                    "allow": ["Shell(*)", "Read(*)", "Write(*)", "WebFetch(*)", "Mcp(*:*)"],
+                    "deny": []
+                }
+            }
         return {"permissions": {"allow": [], "deny": []}}
 
     def sync_client_config(self, settings: dict) -> None:
@@ -98,6 +104,33 @@ is_background: {is_background}
         write_content_if_different(
             config_path, json.dumps(existing, indent=2), backup=False
         )
+
+    def clear_agents(self) -> None:
+        import shutil
+        agents_dir = self.get_agents_dir()
+        if agents_dir.exists():
+            shutil.rmtree(agents_dir)
+            print(f"    Cleared agents: {agents_dir}")
+
+    def clear_skills(self) -> None:
+        import shutil
+        skills_dir = self.get_skills_dir()
+        if skills_dir.exists():
+            shutil.rmtree(skills_dir)
+            print(f"    Cleared skills: {skills_dir}")
+
+    def clear_settings(self) -> None:
+        mcp_path = self.config_dir / "mcp.json"
+        if mcp_path.exists():
+            try:
+                with open(mcp_path, "r", encoding="utf-8") as f:
+                    existing = json.load(f)
+                if "mcpServers" in existing:
+                    del existing["mcpServers"]
+                    write_content_if_different(mcp_path, json.dumps(existing, indent=2), backup=False)
+                    print(f"    Cleared MCP servers from {mcp_path}")
+            except (json.JSONDecodeError, OSError) as e:
+                print(f"  Warning: Could not clear MCP from Cursor config: {e}")
 
     def get_oauth_src_path(self) -> Path | None:
         return None  # TBD

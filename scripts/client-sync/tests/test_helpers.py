@@ -1,8 +1,5 @@
 """Tests for helpers module."""
-import tempfile
 from pathlib import Path
-
-import pytest
 
 from helpers import (
     backup_context,

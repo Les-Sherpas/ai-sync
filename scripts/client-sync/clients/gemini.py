@@ -2,8 +2,9 @@
 import json
 from pathlib import Path
 
-from .base import Client
 from helpers import deep_merge, ensure_dir, write_content_if_different
+
+from .base import Client
 
 
 class GeminiClient(Client):
@@ -110,6 +111,33 @@ tools: {tools_list}
         write_content_if_different(
             settings_path, json.dumps(existing, indent=2), backup=False
         )
+
+    def clear_agents(self) -> None:
+        import shutil
+        agents_dir = self.get_agents_dir()
+        if agents_dir.exists():
+            shutil.rmtree(agents_dir)
+            print(f"    Cleared agents: {agents_dir}")
+
+    def clear_skills(self) -> None:
+        import shutil
+        skills_dir = self.get_skills_dir()
+        if skills_dir.exists():
+            shutil.rmtree(skills_dir)
+            print(f"    Cleared skills: {skills_dir}")
+
+    def clear_settings(self) -> None:
+        settings_path = self.config_dir / "settings.json"
+        if settings_path.exists():
+            try:
+                with open(settings_path, "r", encoding="utf-8") as f:
+                    existing = json.load(f)
+                if "mcpServers" in existing:
+                    del existing["mcpServers"]
+                    write_content_if_different(settings_path, json.dumps(existing, indent=2), backup=False)
+                    print(f"    Cleared MCP servers from {settings_path}")
+            except (json.JSONDecodeError, OSError) as e:
+                print(f"  Warning: Could not clear MCP from Gemini config: {e}")
 
     def get_oauth_src_path(self) -> Path | None:
         return self.config_dir / "mcp-oauth-tokens.json"

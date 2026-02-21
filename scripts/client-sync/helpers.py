@@ -61,7 +61,9 @@ def ensure_dir(path: Path) -> None:
 
 
 def write_content_if_different(path: Path, content: str, *, backup: bool = True) -> bool:
-    """Writes content to path only if it would change the file. Backs up before overwriting when backup=True. Returns True if wrote."""
+    """Writes content to path only if it would change the file.
+    Backs up before overwriting when backup=True. Returns True if wrote.
+    """
     if path.exists():
         try:
             with open(path, "r", encoding="utf-8") as f:
@@ -92,7 +94,9 @@ def deep_merge(base: dict, overlay: dict) -> dict:
 
 
 def copy_file_if_different(src: Path, dst: Path, *, backup: bool = True) -> bool:
-    """Copies src to dst only if dst doesn't exist or has different content. Backs up before overwriting when backup=True. Returns True if copied."""
+    """Copies src to dst only if dst doesn't exist or has different content.
+    Backs up before overwriting when backup=True. Returns True if copied.
+    """
     if not src.exists():
         return False
     if dst.exists() and filecmp.cmp(src, dst, shallow=False):
