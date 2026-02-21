@@ -66,10 +66,9 @@ is_background: {is_background}
         if secret_srv.get("auth"):
             entry["auth"] = {k: str(v) if v is not None else "" for k, v in secret_srv["auth"].items()}
         if method in ("http", "sse"):
-            if server.get("url"):
-                entry["url"] = server["url"]
-            if server.get("httpUrl"):
-                entry["httpUrl"] = server["httpUrl"]
+            url = server.get("url") or server.get("httpUrl")
+            if url:
+                entry["url"] = url
         if server.get("trust") is True:
             entry["trust"] = True
         if server.get("description"):
@@ -101,9 +100,12 @@ is_background: {is_background}
         merged_servers = dict(existing.get("mcpServers", {}))
         for sid, entry in cursor_mcp.items():
             merged_servers[sid] = entry  # full replace so deprecated keys are removed
-        merged = deep_merge(existing, {"mcpServers": merged_servers})
+        for sid in list(merged_servers.keys()):
+            if sid not in cursor_mcp:
+                del merged_servers[sid]  # remove orphaned servers not in manifest
+        existing["mcpServers"] = merged_servers
         write_content_if_different(
-            mcp_path, json.dumps(merged, indent=2), backup=False
+            mcp_path, json.dumps(existing, indent=2), backup=False
         )
 
     def _build_client_config(self, settings: dict) -> dict:

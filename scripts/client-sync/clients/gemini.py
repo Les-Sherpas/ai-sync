@@ -119,8 +119,6 @@ tools: {tools_list}
         for sid in list(merged.keys()):
             if sid not in gemini_mcp:
                 del merged[sid]  # remove orphaned servers not in manifest
-            elif sid in servers and not for_client(servers[sid], self.name):
-                del merged[sid]  # remove servers excluded via clients filter
         existing["mcpServers"] = merged
         write_content_if_different(
             settings_path, json.dumps(existing, indent=2), backup=False
