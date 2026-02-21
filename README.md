@@ -41,7 +41,7 @@ Notes:
 
 - Python 3.10+
 - [Codex](https://developers.openai.com/codex), [Cursor](https://cursor.com), and/or [Gemini CLI](https://geminicli.com) installed
-- For MCP stdio servers: Node.js (`npx`)
+- For MCP stdio servers: Node.js (`npx`), [uv](https://docs.astral.sh/uv/) (`uvx` for workspace-mcp), `pip install mcp-server-fetch` for fetch
 
 ---
 
@@ -190,20 +190,37 @@ servers:
     method: stdio | http | sse
     command: npx
     args: ["-y", "@modelcontextprotocol/server-xxx"]
-    env:                         # Env var names (values from secrets.yaml)
-      API_KEY: ""
     enabled: true
     clients: [codex, cursor, gemini]   # Optional; default: all
+    timeout: 60s                       # Optional; startup/tool timeout
+    trust: true                        # Optional; Cursor/Gemini: auto-approve tools
 ```
 
-For HTTP/SSE:
+**STDIO servers** – `command`, `args`; env vars come from `secrets.yaml`.
+
+**HTTP/SSE servers** – `url`, `httpUrl`; optional `bearer_token_env_var` for Codex.
+
+**HTTP with OAuth** – `httpUrl` + `oauth.enabled: true`; `clientId`/`clientSecret` from `secrets.yaml`:
 
 ```yaml
-  remote-server:
+  google-maps-grounding-lite:
     method: http
-    url: "https://example.com/mcp"
-    bearer_token_env_var: BEARER_TOKEN
+    httpUrl: https://mapstools.googleapis.com/mcp
+    oauth:
+      enabled: true
 ```
+
+### Configured servers
+
+| Server | Method | Description |
+|--------|--------|-------------|
+| context7 | stdio | Documentation lookup (`@upstash/context7-mcp`) |
+| fetch | stdio | URL fetch → markdown (`python -m mcp_server_fetch`) |
+| playwright | stdio | Browser control (`@playwright/mcp`) |
+| exa | http | Search API |
+| google-workspace-perso | stdio | Gmail, Calendar, Drive (personal @gmail.com, separate OAuth) |
+| google-workspace-pro | stdio | Gmail, Calendar, Drive (work @sherpas.com, separate OAuth) |
+| google-maps-grounding-lite | http | Maps grounding (OAuth) |
 
 ### Secrets (`config/mcp-servers/secrets/secrets.yaml`)
 
@@ -211,13 +228,21 @@ Create from `secrets.example.yaml` and fill values. **Never commit** – folder 
 
 ```yaml
 servers:
-  <server_id>:
-    env:                    # Injected into client configs
-      API_KEY: "actual-value"
-      BEARER_TOKEN: "..."
-    auth:                   # Cursor OAuth static credentials
-      CLIENT_ID: "..."
-      CLIENT_SECRET: "..."
+  context7:
+    env:
+      CONTEXT7_API_KEY: "..."
+  google-workspace-perso:
+    env: { GOOGLE_OAUTH_CLIENT_ID: "...", GOOGLE_OAUTH_CLIENT_SECRET: "..." }
+  google-workspace-pro:
+    env: { GOOGLE_OAUTH_CLIENT_ID: "...", GOOGLE_OAUTH_CLIENT_SECRET: "..." }
+  # workspace-mcp: add redirect URIs (localhost:8010, 8012/oauth2callback) to respective OAuth clients
+  google-maps-grounding-lite:
+    oauth:
+      clientId: "..."
+      clientSecret: "..."
+  <other>:
+    env: { ... }           # API keys, bearer tokens
+    auth: { ... }           # Cursor OAuth (CLIENT_ID, CLIENT_SECRET)
 ```
 
 ### Client targets

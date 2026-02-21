@@ -8,9 +8,12 @@
 #     ask-once    = auto-approve safe ops, ask for risky ones (ask-first where supported)
 #     full-access = no approval prompts, no restrictions (YOLO)
 #
+#   tools.sandbox: true | false
+#     Gemini only. Disable to allow uvx/MCP servers that need temp files. Default: true.
+#
 # Client mapping (from official docs):
 #   Codex:  approval_policy, sandbox_mode, features.multi_agent, features.child_agents_md
-#   Gemini: general.defaultApprovalMode, experimental.enableAgents
+#   Gemini: general.defaultApprovalMode, experimental.enableAgents, tools.sandbox
 #   Cursor: permissions.allow, permissions.deny (Shell, Read, Write, WebFetch, Mcp)
 
 subagents: true

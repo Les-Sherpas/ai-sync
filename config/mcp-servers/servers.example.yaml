@@ -1,0 +1,94 @@
+# Copy this file to servers.yaml in this folder and customize.
+# DO NOT commit servers.yaml - it is gitignored.
+# Secrets (API keys, OAuth tokens) go in secrets/secrets.yaml.
+#
+# methods: stdio | http | sse
+# clients: [codex, cursor, gemini] (optional; default all)
+# description: optional, helps LLM choose the right server (Gemini supports this)
+
+global:
+  instructions: >
+    When the user refers to work email, work calendar, shared drives, or professional Google services, use the google-workspace-pro MCP server.
+    When the user refers to personal email, personal calendar, private files, or personal Google services, use the google-workspace-perso MCP server.
+
+servers:
+  context7:
+    method: stdio
+    command: npx
+    args: ["-y", "@upstash/context7-mcp"]
+    enabled: true
+    timeout: 30
+
+  fetch:
+    method: stdio
+    command: python
+    args: ["-m", "mcp_server_fetch"]
+    enabled: true
+
+  playwright:
+    method: stdio
+    command: npx
+    args: ["-y", "@playwright/mcp@latest"]
+    enabled: true
+    timeout: 30
+
+  exa:
+    method: http
+    url: https://mcp.exa.ai/mcp
+    httpUrl: https://mcp.exa.ai/mcp
+    enabled: true
+
+  google-workspace-perso:
+    method: stdio
+    command: uvx
+    args:
+      [
+        "--from",
+        "workspace-mcp",
+        "workspace-mcp",
+        "--transport",
+        "stdio",
+        "--tools",
+        "gmail",
+        "calendar",
+        "--tool-tier",
+        "core",
+      ]
+    enabled: true
+    trust: true
+    timeout: 30
+    env:
+      WORKSPACE_MCP_PORT: "8010"
+      WORKSPACE_MCP_CREDENTIALS_DIR: "~/.google_workspace_mcp/credentials-perso"
+
+  google-workspace-pro:
+    method: stdio
+    command: uvx
+    args:
+      [
+        "--from",
+        "workspace-mcp",
+        "workspace-mcp",
+        "--transport",
+        "stdio",
+        "--tools",
+        "gmail",
+        "calendar",
+        "--tool-tier",
+        "core",
+      ]
+    enabled: true
+    trust: true
+    timeout: 30
+    env:
+      WORKSPACE_MCP_PORT: "8012"
+      WORKSPACE_MCP_CREDENTIALS_DIR: "~/.google_workspace_mcp/credentials-pro"
+
+  google-maps-grounding-lite:
+    method: http
+    httpUrl: https://mapstools.googleapis.com/mcp
+    enabled: true
+    oauth:
+      enabled: true
+      scopes:
+        - https://www.googleapis.com/auth/cloud-platform

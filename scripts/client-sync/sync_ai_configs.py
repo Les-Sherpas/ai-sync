@@ -366,18 +366,22 @@ def _check_client_versions(versions_path: Path) -> tuple[bool, str]:
     return True, "OK"
 
 
-def _load_servers() -> dict:
-    """Load config/mcp-servers/servers.yaml."""
+def _load_mcp_manifest() -> dict:
+    """Load full config/mcp-servers/servers.yaml (servers + global)."""
     servers_path = SOURCE_MCP / "servers.yaml"
     if not servers_path.exists():
         return {}
     try:
         with open(servers_path, "r", encoding="utf-8") as f:
-            manifest = yaml.safe_load(f)
-        return manifest.get("servers") or {}
+            return yaml.safe_load(f) or {}
     except (yaml.YAMLError, OSError) as e:
         display.print(f"Failed to load {servers_path}: {e}", style="warning")
         return {}
+
+
+def _load_servers() -> dict:
+    """Load servers from config/mcp-servers/servers.yaml."""
+    return _load_mcp_manifest().get("servers") or {}
 
 
 def _load_secrets() -> dict:
@@ -477,7 +481,8 @@ def sync_mcp_servers() -> None:
         display.print("MCP Servers: skipping (config/mcp-servers/ not found)", style="dim")
         return
 
-    servers = _load_servers()
+    manifest = _load_mcp_manifest()
+    servers = manifest.get("servers") or {}
     if not servers:
         display.print("MCP Servers: skipping (no servers)", style="dim")
         return
@@ -490,6 +495,12 @@ def sync_mcp_servers() -> None:
     server_ids = [sid for sid, srv in servers.items() if srv.get("enabled", True)]
     for client in CLIENTS:
         client.sync_mcp(servers, secrets, _for_client)
+
+    instructions = (manifest.get("global") or {}).get("instructions")
+    if instructions and isinstance(instructions, str) and instructions.strip():
+        for client in CLIENTS:
+            client.sync_mcp_instructions(instructions.strip())
+
     display.table(
         ("Item", "Value"),
         [

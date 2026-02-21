@@ -1,3 +1,6 @@
+# MCP servers manifest - customize locally; never commit
+config/mcp-servers/servers.yaml
+
 # MCP secrets - never commit; sync via secure private channel
 config/mcp-servers/secrets/*
 !config/mcp-servers/secrets/secrets.example.yaml

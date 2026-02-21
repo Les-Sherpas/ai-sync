@@ -1,4 +1,5 @@
 """Codex client adapter."""
+import re
 from collections.abc import Callable
 from pathlib import Path
 
@@ -51,18 +52,34 @@ web_search = "{web_search_val}"
 
     def _build_mcp_entry(self, server_id: str, server: dict, secrets: dict) -> dict:
         table: dict = {"enabled": server.get("enabled", True)}
-        secret_srv = secrets.get("servers", {}).get(server_id, {})
+        servers_secrets = secrets.get("servers", {})
+        if server_id not in servers_secrets:
+            raise ValueError(
+                f"No secret found for MCP server '{server_id}'. "
+                f"Add an entry in config/mcp-servers/secrets/secrets.yaml (use {{}} for no env)."
+            )
+        secret_srv = servers_secrets[server_id]
         env_secrets = secret_srv.get("env", {})
 
         if server.get("method") in ("http", "sse"):
-            table["url"] = server.get("url", "")
+            table["url"] = server.get("url") or server.get("httpUrl", "")
             if server.get("bearer_token_env_var"):
                 table["bearer_token_env_var"] = server["bearer_token_env_var"]
         else:
             table["command"] = server.get("command", "npx")
             table["args"] = server.get("args", [])
+            env_parts: list[dict] = []
+            if server.get("env"):
+                env_parts.append({k: str(v) if v is not None else "" for k, v in server["env"].items()})
             if env_secrets:
-                table["env"] = {k: str(v) if v is not None else "" for k, v in env_secrets.items()}
+                env_parts.append({k: str(v) if v is not None else "" for k, v in env_secrets.items()})
+            if env_parts:
+                merged_env: dict = {}
+                for e in env_parts:
+                    merged_env.update(e)
+                table["env"] = merged_env
+        if server.get("description"):
+            table["description"] = str(server["description"])
         if "timeout" in server:
             try:
                 sec = parse_duration_seconds(server["timeout"])
@@ -100,6 +117,9 @@ web_search = "{web_search_val}"
             merged = dict(existing["mcp_servers"])
             for sid, entry in codex_mcp.items():
                 merged[sid] = entry  # full replace so deprecated keys (e.g. timeout) are removed
+            for sid in list(merged.keys()):
+                if sid not in codex_mcp:
+                    del merged[sid]  # remove orphaned servers not in manifest
             existing["mcp_servers"] = merged
             write_content_if_different(config_path, tomli_w.dumps(existing), backup=False)
         except (OSError, tomli.TOMLDecodeError) as e:
@@ -118,6 +138,8 @@ web_search = "{web_search_val}"
         out: dict = {}
         subagents = settings.get("subagents", True)
         mode = settings.get("mode", "ask")
+        if settings.get("suppress_unstable_features_warning", False):
+            out["suppress_unstable_features_warning"] = True
 
         if subagents:
             out.setdefault("features", {})
@@ -151,6 +173,33 @@ web_search = "{web_search_val}"
         except (OSError, tomli.TOMLDecodeError) as e:
             print(f"  Warning: Could not update Codex client config: {e}")
 
+    def sync_mcp_instructions(self, instructions: str) -> None:
+        if not instructions or not instructions.strip():
+            return
+        ensure_dir(self.config_dir)
+        config_path = self.config_dir / "config.toml"
+        begin_marker = "<!-- BEGIN sync-ai-configs MCP instructions -->"
+        end_marker = "<!-- END sync-ai-configs MCP instructions -->"
+        block = f"{begin_marker}\n{instructions.strip()}\n{end_marker}"
+        try:
+            existing: dict = {}
+            if config_path.exists():
+                with open(config_path, "rb") as f:
+                    existing = tomli.load(f)
+            current = str(existing.get("developer_instructions", "") or "")
+            pattern = re.compile(
+                rf"{re.escape(begin_marker)}.*?{re.escape(end_marker)}",
+                re.DOTALL,
+            )
+            if pattern.search(current):
+                new_instructions = pattern.sub(block, current).strip()
+            else:
+                new_instructions = (current.rstrip() + "\n\n" + block).strip() if current else block
+            existing["developer_instructions"] = new_instructions
+            write_content_if_different(config_path, tomli_w.dumps(existing), backup=False)
+        except (OSError, tomli.TOMLDecodeError) as e:
+            print(f"  Warning: Could not update Codex developer_instructions: {e}")
+
     def clear_agents(self) -> None:
         import shutil
         agents_dir = self.get_agents_dir()
@@ -177,11 +226,37 @@ web_search = "{web_search_val}"
                     print(f"    Cleared MCP servers from {config_path}")
             except (OSError, tomli.TOMLDecodeError) as e:
                 print(f"  Warning: Could not clear MCP from Codex config: {e}")
+        self.clear_mcp_instructions()
 
         mcp_env_path = self.config_dir / "mcp.env"
         if mcp_env_path.exists():
             mcp_env_path.unlink()
             print(f"    Deleted {mcp_env_path}")
+
+    def clear_mcp_instructions(self) -> None:
+        begin_marker = "<!-- BEGIN sync-ai-configs MCP instructions -->"
+        end_marker = "<!-- END sync-ai-configs MCP instructions -->"
+        config_path = self.config_dir / "config.toml"
+        if not config_path.exists():
+            return
+        try:
+            with open(config_path, "rb") as f:
+                existing = tomli.load(f)
+            current = str(existing.get("developer_instructions", "") or "")
+            pattern = re.compile(
+                rf"{re.escape(begin_marker)}.*?{re.escape(end_marker)}",
+                re.DOTALL,
+            )
+            new_instructions = pattern.sub("", current).strip()
+            if new_instructions != current:
+                if new_instructions:
+                    existing["developer_instructions"] = new_instructions
+                elif "developer_instructions" in existing:
+                    del existing["developer_instructions"]
+                write_content_if_different(config_path, tomli_w.dumps(existing), backup=False)
+                print("    Removed MCP instructions from Codex developer_instructions")
+        except (OSError, tomli.TOMLDecodeError) as e:
+            print(f"  Warning: Could not clear Codex MCP instructions: {e}")
 
     def get_oauth_src_path(self) -> Path | None:
         return self.config_dir / "auth.json"

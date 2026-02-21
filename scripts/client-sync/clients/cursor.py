@@ -41,17 +41,39 @@ is_background: {is_background}
         write_content_if_different(agent_path, content, backup=False)
 
     def _build_mcp_entry(self, server_id: str, server: dict, secrets: dict) -> dict:
-        entry: dict = {
-            "command": server.get("command", "npx"),
-            "args": server.get("args", []),
-        }
-        secret_srv = secrets.get("servers", {}).get(server_id, {})
+        method = server.get("method", "stdio")
+        entry: dict = {}
+        if method == "stdio":
+            entry["command"] = server.get("command", "npx")
+            entry["args"] = server.get("args", [])
+        servers_secrets = secrets.get("servers", {})
+        if server_id not in servers_secrets:
+            raise ValueError(
+                f"No secret found for MCP server '{server_id}'. "
+                f"Add an entry in config/mcp-servers/secrets/secrets.yaml (use {{}} for no env)."
+            )
+        secret_srv = servers_secrets[server_id]
+        env_parts: list[dict] = []
+        if server.get("env"):
+            env_parts.append({k: str(v) if v is not None else "" for k, v in server["env"].items()})
         if secret_srv.get("env"):
-            entry["env"] = {k: str(v) if v is not None else "" for k, v in secret_srv["env"].items()}
+            env_parts.append({k: str(v) if v is not None else "" for k, v in secret_srv["env"].items()})
+        if env_parts:
+            merged_env: dict = {}
+            for e in env_parts:
+                merged_env.update(e)
+            entry["env"] = merged_env
         if secret_srv.get("auth"):
             entry["auth"] = {k: str(v) if v is not None else "" for k, v in secret_srv["auth"].items()}
-        if server.get("method") in ("http", "sse"):
-            entry["url"] = server.get("url", "")
+        if method in ("http", "sse"):
+            if server.get("url"):
+                entry["url"] = server["url"]
+            if server.get("httpUrl"):
+                entry["httpUrl"] = server["httpUrl"]
+        if server.get("trust") is True:
+            entry["trust"] = True
+        if server.get("description"):
+            entry["description"] = str(server["description"])
         if "timeout" in server:
             try:
                 entry["timeout"] = parse_duration_seconds(server["timeout"]) * 1000  # ms
@@ -139,9 +161,34 @@ is_background: {is_background}
                     print(f"    Cleared MCP servers from {mcp_path}")
             except (json.JSONDecodeError, OSError) as e:
                 print(f"  Warning: Could not clear MCP from Cursor config: {e}")
+        self.clear_mcp_instructions()
+
+    def clear_mcp_instructions(self) -> None:
+        rule_path = self.config_dir / "rules" / "mcp-instructions.mdc"
+        if rule_path.exists():
+            rule_path.unlink()
+            print(f"    Removed {rule_path}")
 
     def get_oauth_src_path(self) -> Path | None:
         return None  # TBD
 
     def get_oauth_stash_filename(self) -> str | None:
         return None
+
+    def sync_mcp_instructions(self, instructions: str) -> None:
+        if not instructions or not instructions.strip():
+            return
+        rules_dir = self.config_dir / "rules"
+        ensure_dir(rules_dir)
+        content = f"""---
+description: MCP server selection guidance (e.g. which Google Workspace to use)
+alwaysApply: true
+---
+
+# MCP Server Instructions
+
+{instructions.strip()}
+"""
+        write_content_if_different(
+            rules_dir / "mcp-instructions.mdc", content, backup=False
+        )

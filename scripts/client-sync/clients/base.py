@@ -78,3 +78,11 @@ class Client(ABC):
     def enable_subagents_fallback(self) -> None:
         """Enable experimental subagents when settings.yaml is absent. Fallback only."""
         pass
+
+    def sync_mcp_instructions(self, instructions: str) -> None:
+        """Write global MCP instructions to client-specific config. Default: no-op."""
+        pass
+
+    def clear_mcp_instructions(self) -> None:
+        """Remove MCP instructions written by sync. Default: no-op."""
+        pass
