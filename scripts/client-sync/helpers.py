@@ -11,9 +11,10 @@ _BACKUP_ROOT: Path | None = None
 
 
 @contextmanager
-def backup_context(root: Path):
+def backup_context(root: Path | None):
     """Context manager that sets the backup root for the duration of the block.
-    Use this instead of set_backup_root() for explicit scoping and testability."""
+    Use this instead of set_backup_root() for explicit scoping and testability.
+    Pass None to disable backups."""
     global _BACKUP_ROOT
     prev = _BACKUP_ROOT
     _BACKUP_ROOT = root
