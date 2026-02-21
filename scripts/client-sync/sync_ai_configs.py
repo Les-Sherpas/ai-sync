@@ -334,7 +334,6 @@ def main() -> int:
                 print(f"Clearing for {client.name}...")
                 client.clear()
         print("--- Clear Complete ---")
-        return 0
 
     if args.capture_oauth:
         with backup_context(BACKUP_ROOT_PATH):
