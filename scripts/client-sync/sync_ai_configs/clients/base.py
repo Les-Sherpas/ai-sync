@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import os
-import shutil
 import stat
 from abc import ABC, abstractmethod
 from collections.abc import Callable
@@ -13,11 +12,9 @@ from pathlib import Path
 import tomli
 import tomli_w
 
-from sync_ai_configs.helpers import backup_path
-
-
 class Client(ABC):
-    _MANAGED_MARKER = "_managed_by_sync_ai_configs"
+    _MANAGED_MARKER = "_managed_by_sync_ai_configs"  # Migration: read from existing config when sidecar missing
+    _SIDECAR_NAME = ".sync_managed_mcp.json"
 
     @property
     @abstractmethod
@@ -56,11 +53,11 @@ class Client(ABC):
             return {}
 
     @staticmethod
-    def _write_json_config(path: Path, data: dict) -> str:
+    def _write_json_config(data: dict) -> str:
         return json.dumps(data, indent=2)
 
     @staticmethod
-    def _write_toml_config(path: Path, data: dict) -> str:
+    def _write_toml_config(data: dict) -> str:
         return tomli_w.dumps(data)
 
     def _build_mcp_env(self, server: dict, secret_srv: dict) -> dict:
@@ -79,13 +76,41 @@ class Client(ABC):
     def _get_secret_for_server(self, server_id: str, secrets: dict) -> dict:
         return secrets.get("servers", {}).get(server_id, {})
 
+    def _get_managed_mcp_sidecar_path(self) -> Path:
+        return self.config_dir / self._SIDECAR_NAME
+
+    def _read_managed_mcp_ids(self) -> set[str]:
+        path = self._get_managed_mcp_sidecar_path()
+        if not path.exists():
+            return set()
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            ids = data if isinstance(data, list) else data.get("managed", [])
+            return set(str(i) for i in ids)
+        except (json.JSONDecodeError, OSError):
+            return set()
+
+    def _write_managed_mcp_ids(self, server_ids: list[str]) -> None:
+        path = self._get_managed_mcp_sidecar_path()
+        path.write_text(json.dumps(server_ids, indent=2), encoding="utf-8")
+
     def _merge_managed_servers(self, existing_servers: dict, new_servers: dict) -> dict:
-        merged = dict(existing_servers)
+        managed_ids = self._read_managed_mcp_ids()
+        if not managed_ids:
+            managed_ids = {
+                sid
+                for sid, srv in existing_servers.items()
+                if srv.get(self._MANAGED_MARKER)
+            }
+        merged: dict = {}
+        for sid, srv in existing_servers.items():
+            if sid in managed_ids and sid not in new_servers:
+                continue
+            cleaned = {k: v for k, v in srv.items() if k != self._MANAGED_MARKER}
+            merged[sid] = cleaned
         for sid, entry in new_servers.items():
-            merged[sid] = {**entry, self._MANAGED_MARKER: True}
-        for sid in list(merged.keys()):
-            if sid not in new_servers and merged[sid].get(self._MANAGED_MARKER):
-                del merged[sid]
+            merged[sid] = dict(entry)
+        self._write_managed_mcp_ids(list(new_servers.keys()))
         return merged
 
     @staticmethod
@@ -111,36 +136,8 @@ class Client(ABC):
     def sync_client_config(self, settings: dict) -> None:
         ...
 
-    @abstractmethod
-    def clear_settings(self, *, use_backups: bool = False) -> None:
-        ...
-
-    def clear(self, *, use_backups: bool = False) -> None:
-        self.clear_agents(use_backups=use_backups)
-        self.clear_skills(use_backups=use_backups)
-        self.clear_settings(use_backups=use_backups)
-
-    def clear_agents(self, *, use_backups: bool = False) -> None:
-        agents_dir = self.get_agents_dir()
-        if agents_dir.exists():
-            if use_backups:
-                backup_path(agents_dir)
-            shutil.rmtree(agents_dir)
-            print(f"    Cleared agents: {agents_dir}")
-
-    def clear_skills(self, *, use_backups: bool = False) -> None:
-        skills_dir = self.get_skills_dir()
-        if skills_dir.exists():
-            if use_backups:
-                backup_path(skills_dir)
-            shutil.rmtree(skills_dir)
-            print(f"    Cleared skills: {skills_dir}")
-
     def enable_subagents_fallback(self) -> None:
         pass
 
     def sync_mcp_instructions(self, instructions: str) -> None:
-        pass
-
-    def clear_mcp_instructions(self, *, use_backups: bool = False) -> None:
         pass

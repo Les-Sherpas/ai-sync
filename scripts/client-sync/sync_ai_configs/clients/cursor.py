@@ -7,7 +7,6 @@ from collections.abc import Callable
 from pathlib import Path
 
 from sync_ai_configs.helpers import (
-    backup_path,
     deep_merge,
     ensure_dir,
     parse_duration_seconds,
@@ -38,7 +37,7 @@ is_background: {"true" if meta.get("is_background", False) else "false"}
 
 {raw_content}
 """
-        write_content_if_different(agent_path, content, backup=False)
+        write_content_if_different(agent_path, content)
 
     def _build_mcp_entry(self, server_id: str, server: dict, secrets: dict) -> dict:
         secret_srv = self._get_secret_for_server(server_id, secrets)
@@ -81,7 +80,7 @@ is_background: {"true" if meta.get("is_background", False) else "false"}
         mcp_path = self.config_dir / "mcp.json"
         existing = self._read_json_config(mcp_path)
         existing["mcpServers"] = self._merge_managed_servers(existing.get("mcpServers", {}), cursor_mcp)
-        write_content_if_different(mcp_path, self._write_json_config(mcp_path, existing), backup=False)
+        write_content_if_different(mcp_path, self._write_json_config(existing))
         if any(e.get("env") or e.get("auth") for e in cursor_mcp.values()):
             self._set_restrictive_permissions(mcp_path)
             self._warn_plaintext_secrets(mcp_path)
@@ -98,30 +97,7 @@ is_background: {"true" if meta.get("is_background", False) else "false"}
         ensure_dir(self.config_dir)
         config_path = self.config_dir / "cli-config.json"
         existing = self._read_json_config(config_path)
-        write_content_if_different(config_path, self._write_json_config(config_path, deep_merge(existing, updates)), backup=False)
-
-    def clear_settings(self, *, use_backups: bool = False) -> None:
-        mcp_path = self.config_dir / "mcp.json"
-        if mcp_path.exists():
-            try:
-                if use_backups:
-                    backup_path(mcp_path)
-                existing = self._read_json_config(mcp_path)
-                if "mcpServers" in existing:
-                    del existing["mcpServers"]
-                    write_content_if_different(mcp_path, self._write_json_config(mcp_path, existing), backup=False)
-                    print(f"    Cleared MCP servers from {mcp_path}")
-            except OSError as e:
-                print(f"  Warning: Could not clear MCP from Cursor config: {e}")
-        self.clear_mcp_instructions(use_backups=use_backups)
-
-    def clear_mcp_instructions(self, *, use_backups: bool = False) -> None:
-        rule_path = self.config_dir / "rules" / "mcp-instructions.mdc"
-        if rule_path.exists():
-            if use_backups:
-                backup_path(rule_path)
-            rule_path.unlink()
-            print(f"    Removed {rule_path}")
+        write_content_if_different(config_path, self._write_json_config(deep_merge(existing, updates)))
 
     def sync_mcp_instructions(self, instructions: str) -> None:
         if not instructions or not instructions.strip():
@@ -137,4 +113,4 @@ alwaysApply: true
 
 {instructions.strip()}
 """
-        write_content_if_different(rules_dir / "mcp-instructions.mdc", content, backup=False)
+        write_content_if_different(rules_dir / "mcp-instructions.mdc", content)

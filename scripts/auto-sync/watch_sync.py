@@ -14,7 +14,7 @@ from watchfiles import watch
 REPO_ROOT = Path(__file__).resolve().parents[2]
 NOTIFY_SCRIPT = REPO_ROOT / "scripts" / "auto-sync" / "notify_sync.sh"
 SUMMARY_SCRIPT = REPO_ROOT / "scripts" / "shared" / "sync_summary.py"
-WATCH_PATHS = [REPO_ROOT / "config"]
+WATCH_PATHS = [REPO_ROOT / "config", REPO_ROOT / ".env.tpl"]
 OP_ACCOUNT_PATTERN = re.compile(r'^\s*export\s+OP_ACCOUNT=["\']([^"\']*)["\']')
 
 
@@ -139,6 +139,10 @@ def main() -> int:
             _notify(f"Sync failed: {err}")
 
     paths = [p for p in WATCH_PATHS if p.exists()]
+    missing_paths = [p for p in WATCH_PATHS if not p.exists()]
+    if missing_paths:
+        missing = ", ".join(str(p) for p in missing_paths)
+        print(f"Warning: watch paths missing at startup: {missing}", file=sys.stderr)
     if not paths:
         print("No watch paths exist. Check config directory.", file=sys.stderr)
         return 1

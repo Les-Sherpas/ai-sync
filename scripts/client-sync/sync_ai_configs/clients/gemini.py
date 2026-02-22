@@ -8,7 +8,6 @@ from collections.abc import Callable
 from pathlib import Path
 
 from sync_ai_configs.helpers import (
-    backup_path,
     deep_merge,
     ensure_dir,
     parse_duration_seconds,
@@ -39,7 +38,7 @@ tools: {json.dumps(meta.get("tools", ["google_web_search"]))}
 
 {raw_content}
 """
-        write_content_if_different(agent_path, content, backup=False)
+        write_content_if_different(agent_path, content)
 
     def _build_mcp_entry(self, server_id: str, server: dict, secrets: dict) -> dict:
         secret_srv = self._get_secret_for_server(server_id, secrets)
@@ -91,7 +90,7 @@ tools: {json.dumps(meta.get("tools", ["google_web_search"]))}
         settings_path = self.config_dir / "settings.json"
         existing = self._read_json_config(settings_path)
         existing["mcpServers"] = self._merge_managed_servers(existing.get("mcpServers", {}), gemini_mcp)
-        write_content_if_different(settings_path, self._write_json_config(settings_path, existing), backup=False)
+        write_content_if_different(settings_path, self._write_json_config(existing))
         if has_secrets:
             self._set_restrictive_permissions(settings_path)
             self._warn_plaintext_secrets(settings_path)
@@ -117,37 +116,7 @@ tools: {json.dumps(meta.get("tools", ["google_web_search"]))}
         ensure_dir(self.config_dir)
         settings_path = self.config_dir / "settings.json"
         existing = self._read_json_config(settings_path)
-        write_content_if_different(settings_path, self._write_json_config(settings_path, deep_merge(existing, updates)), backup=False)
-
-    def clear_settings(self, *, use_backups: bool = False) -> None:
-        settings_path = self.config_dir / "settings.json"
-        if settings_path.exists():
-            if use_backups:
-                backup_path(settings_path)
-            existing = self._read_json_config(settings_path)
-            if "mcpServers" in existing:
-                del existing["mcpServers"]
-                write_content_if_different(settings_path, self._write_json_config(settings_path, existing), backup=False)
-                print(f"    Cleared MCP servers from {settings_path}")
-        self.clear_mcp_instructions(use_backups=use_backups)
-
-    def clear_mcp_instructions(self, *, use_backups: bool = False) -> None:
-        begin_marker = "<!-- BEGIN sync-ai-configs MCP instructions -->"
-        end_marker = "<!-- END sync-ai-configs MCP instructions -->"
-        gemini_md = self.config_dir / "GEMINI.md"
-        if not gemini_md.exists():
-            return
-        if use_backups:
-            backup_path(gemini_md)
-        content = gemini_md.read_text(encoding="utf-8")
-        pattern = re.compile(rf"{re.escape(begin_marker)}.*?{re.escape(end_marker)}\n?", re.DOTALL)
-        new_content = pattern.sub("", content).strip()
-        if new_content != content.strip():
-            if new_content:
-                write_content_if_different(gemini_md, new_content + "\n", backup=False)
-            else:
-                gemini_md.unlink()
-            print("    Removed MCP instructions from Gemini GEMINI.md")
+        write_content_if_different(settings_path, self._write_json_config(deep_merge(existing, updates)))
 
     def sync_mcp_instructions(self, instructions: str) -> None:
         if not instructions or not instructions.strip():
@@ -164,7 +133,7 @@ tools: {json.dumps(meta.get("tools", ["google_web_search"]))}
             new_content = pattern.sub(block, content) if pattern.search(content) else content.rstrip() + "\n\n" + block + "\n"
         else:
             new_content = block + "\n"
-        write_content_if_different(gemini_md, new_content, backup=False)
+        write_content_if_different(gemini_md, new_content)
 
     def enable_subagents_fallback(self) -> None:
         settings_path = self.config_dir / "settings.json"
@@ -180,4 +149,4 @@ tools: {json.dumps(meta.get("tools", ["google_web_search"]))}
             changed = True
         if changed:
             print("  Enabling experimental.enableAgents in ~/.gemini/settings.json")
-            write_content_if_different(settings_path, self._write_json_config(settings_path, data), backup=False)
+            write_content_if_different(settings_path, self._write_json_config(data))

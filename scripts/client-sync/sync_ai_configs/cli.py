@@ -18,8 +18,6 @@ def parse_args() -> argparse.Namespace:
         description="Sync AI configs (agents, skills, MCP servers) to Codex, Cursor, Gemini."
     )
     parser.add_argument("--force", action="store_true", help="Force sync and overwrite scripts/.client-versions.json.")
-    parser.add_argument("--clear", action="store_true", help="Clear agents/skills/MCP config before syncing.")
-    parser.add_argument("--backup", action="store_true", help="When combined with --clear, back up configs first.")
     parser.add_argument("--no-interactive", action="store_true", help="Skip interactive prompts.")
     parser.add_argument("--plain", action="store_true", help="Plain output mode. Implies --no-interactive.")
     parser.add_argument("--override", action="append", default=[], help="Override leaf value: /path/to/key=value")
@@ -73,8 +71,6 @@ def main() -> int:
         return run_sync(
             repo_root=repo_root,
             force=args.force,
-            clear=args.clear,
-            backup=args.backup,
             no_interactive=(args.no_interactive or args.plain),
             plain=args.plain,
             overrides=overrides,

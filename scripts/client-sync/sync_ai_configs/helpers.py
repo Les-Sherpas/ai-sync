@@ -6,48 +6,8 @@ import filecmp
 import os
 import re
 import shutil
-import tarfile
 from contextlib import contextmanager
-from datetime import datetime
 from pathlib import Path
-
-_BACKUP_ROOT: Path | None = None
-
-
-@contextmanager
-def backup_context(root: Path | None):
-    global _BACKUP_ROOT
-    prev = _BACKUP_ROOT
-    _BACKUP_ROOT = root
-    try:
-        yield
-    finally:
-        _BACKUP_ROOT = prev
-
-
-def _get_backup_root() -> Path | None:
-    return _BACKUP_ROOT
-
-
-def backup_path(path: Path) -> None:
-    root = _get_backup_root()
-    if not path.exists() or root is None:
-        return
-    try:
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-        try:
-            rel = path.relative_to(Path.home())
-        except ValueError:
-            rel = path
-        name_safe = str(rel).replace("/", "_").replace("\\", "_")
-        archive_name = f"{timestamp}_{name_safe}.tar.gz"
-        backup_file = root / archive_name
-        backup_file.parent.mkdir(parents=True, exist_ok=True)
-        with tarfile.open(backup_file, "w:gz") as tar:
-            tar.add(path, arcname=path.name)
-        print(f"  Backed up {path} -> {backup_file}")
-    except OSError as e:
-        print(f"  Warning: Could not backup {path}: {e}")
 
 
 def parse_duration_seconds(value: str | int | float) -> int:
@@ -81,14 +41,12 @@ def _atomic_write(path: Path):
         raise
 
 
-def write_content_if_different(path: Path, content: str, *, backup: bool = True) -> bool:
+def write_content_if_different(path: Path, content: str) -> bool:
     if path.exists():
         try:
             with open(path, "r", encoding="utf-8") as f:
                 if f.read() == content:
                     return False
-            if backup:
-                backup_path(path)
         except (OSError, UnicodeDecodeError) as exc:
             print(f"  Warning: Could not read {path}, skipping: {exc}")
             return False
@@ -110,13 +68,11 @@ def deep_merge(base: dict, overlay: dict) -> dict:
     return result
 
 
-def copy_file_if_different(src: Path, dst: Path, *, backup: bool = True) -> bool:
+def copy_file_if_different(src: Path, dst: Path) -> bool:
     if not src.exists():
         return False
     if dst.exists() and filecmp.cmp(src, dst, shallow=False):
         return False
-    if dst.exists() and backup:
-        backup_path(dst)
     ensure_dir(dst.parent)
     tmp = dst.with_suffix(f"{dst.suffix}.{os.getpid()}.tmp")
     try:
@@ -128,7 +84,7 @@ def copy_file_if_different(src: Path, dst: Path, *, backup: bool = True) -> bool
     return True
 
 
-def sync_tree_if_different(src: Path, dst: Path, skip_patterns: set[str], *, backup: bool = True) -> bool:
+def sync_tree_if_different(src: Path, dst: Path, skip_patterns: set[str]) -> bool:
     changed = False
 
     def should_skip(relative_path: Path) -> bool:
@@ -139,8 +95,6 @@ def sync_tree_if_different(src: Path, dst: Path, skip_patterns: set[str], *, bac
         if item.is_file() and not should_skip(rel):
             target = dst / rel
             if not target.exists() or not filecmp.cmp(item, target, shallow=False):
-                if target.exists() and backup:
-                    backup_path(target)
                 ensure_dir(target.parent)
                 tmp = target.with_suffix(f"{target.suffix}.{os.getpid()}.tmp")
                 try:

@@ -101,8 +101,6 @@ Run from the **repository root** so the script finds `config/prompts/`, `config/
 |--------|--------------|
 | (none) | Full sync: agents → skills → MCP servers → client config |
 | `--force` | Update `scripts/.client-versions.json` with local client versions, then sync |
-| `--clear` | Clear agents, skills, and MCP config before syncing |
-| `--backup` | With `--clear`: back up configs before clearing |
 | `--no-interactive` | Skip interactive prompts |
 | `--plain` | Plain output (implies `--no-interactive`) |
 | `--override` / `--override-json` | Override manifest leaf values (e.g. `/servers/context7/enabled=false`) |
@@ -117,9 +115,9 @@ Run from the **repository root** so the script finds `config/prompts/`, `config/
 
 ### Sync strategy
 
-- **Agents, skills, client config**: No backup. Files overwritten if they exist. Untracked agents/skills (not in config/prompts/ or config/skills/) are left alone.
+- **Agents, skills, client config**: Files overwritten if they exist. Untracked agents/skills (not in config/prompts/ or config/skills/) are left alone.
 - **Client config**: Deep-merge with existing; ai-tools keys overwrite on conflict.
-- **MCP OAuth cache** (restore): Backup before overwrite.
+- **MCP servers**: Merged with existing; managed servers updated, user-added servers preserved.
 
 ---
 

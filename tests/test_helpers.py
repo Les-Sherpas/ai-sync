@@ -1,7 +1,6 @@
 from pathlib import Path
 
 from sync_ai_configs.helpers import (
-    backup_context,
     copy_file_if_different,
     deep_merge,
     ensure_dir,
@@ -51,8 +50,3 @@ def test_sync_tree_if_different(tmp_path: Path) -> None:
     src.mkdir()
     (src / "x").write_text("1", encoding="utf-8")
     assert sync_tree_if_different(src, dst, {"__pycache__"})
-
-
-def test_backup_context() -> None:
-    with backup_context(Path("/tmp/x")):
-        pass

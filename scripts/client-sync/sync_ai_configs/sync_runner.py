@@ -146,13 +146,6 @@ def execute(config: RunConfig, manifest: dict, display: Display) -> int:
     display.print("")
     display.rule("Starting Sync", style="info")
     display.print(f"Source: {config.repo_root}", style="info")
-    if config.options.clear_first:
-        display.rule("Clearing Client Configs", style="error")
-        for client in CLIENTS:
-            display.print(f"  Clearing {client.name}...", style="info")
-            client.clear(use_backups=config.options.use_backups)
-        display.print("Clear complete", style="success")
-        display.print("")
     sync_agents(config, display)
     sync_skills(config, display)
     sync_mcp_servers(manifest, display)
@@ -167,8 +160,6 @@ def run_sync(
     *,
     repo_root: Path,
     force: bool,
-    clear: bool,
-    backup: bool,
     no_interactive: bool,
     plain: bool,
     overrides: list[tuple[str, object]],
@@ -196,19 +187,15 @@ def run_sync(
     skill_names = sorted(d.name for d in source_skills.iterdir() if d.is_dir() and (d / "SKILL.md").exists()) if source_skills.exists() else []
     if not agent_stems and not skill_names:
         raise RuntimeError("No agents or skills found in config")
-    if backup and not clear:
-        display.print("--backup ignored without --clear (sync is idempotent).", style="warning")
 
     if no_interactive or plain:
         options = SyncOptions(
             agent_stems=frozenset(agent_stems),
             skill_names=frozenset(skill_names),
             install_settings=True,
-            use_backups=clear and backup,
-            clear_first=clear,
         )
     else:
-        opts = run_interactive_prompts(display, agent_stems, skill_names, clear_default=clear, backup_default=backup)
+        opts = run_interactive_prompts(display, agent_stems, skill_names)
         if opts is None:
             raise RuntimeError("Cancelled")
         options = opts

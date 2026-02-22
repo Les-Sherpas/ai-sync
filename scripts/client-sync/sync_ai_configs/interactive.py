@@ -12,17 +12,12 @@ class SyncOptions:
     agent_stems: frozenset[str]
     skill_names: frozenset[str]
     install_settings: bool
-    use_backups: bool
-    clear_first: bool
 
 
 def run_interactive_prompts(
     display: Display,
     agent_stems: list[str],
     skill_names: list[str],
-    *,
-    clear_default: bool = False,
-    backup_default: bool = False,
 ) -> SyncOptions | None:
     import questionary
 
@@ -48,19 +43,8 @@ def run_interactive_prompts(
     if install_settings is None:
         return None
 
-    clear_first = questionary.confirm("Clear existing setups before syncing?", default=clear_default).ask()
-    if clear_first is None:
-        return None
-    use_backups = False
-    if clear_first:
-        answer = questionary.confirm("Back up client configs before clearing?", default=backup_default).ask()
-        if answer is None:
-            return None
-        use_backups = answer
     return SyncOptions(
         agent_stems=frozenset(selected_agents or []),
         skill_names=frozenset(selected_skills or []),
         install_settings=install_settings,
-        use_backups=use_backups,
-        clear_first=clear_first,
     )
