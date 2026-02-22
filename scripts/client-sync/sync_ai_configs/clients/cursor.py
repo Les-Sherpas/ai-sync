@@ -31,7 +31,7 @@ class CursorClient(Client):
         content = f"""---
 name: {json.dumps(meta.get("name", slug))}
 description: {json.dumps(meta.get("description", "AI Agent"))}
-model: {meta.get("models", {}).get("cursor", "gpt-5.2")}
+model: auto
 is_background: {"true" if meta.get("is_background", False) else "false"}
 ---
 

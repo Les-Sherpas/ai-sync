@@ -33,7 +33,7 @@ class CodexClient(Client):
         codex_prompt_path = agent_dir / "prompt.md"
         copy_file_if_different(prompt_src_path, codex_prompt_path)
         config_data = {
-            "model": meta.get("models", {}).get("codex", "gpt-5"),
+            "model": "auto",
             "model_reasoning_effort": meta.get("reasoning_effort", "high"),
             "model_instructions_file": str(codex_prompt_path),
             "web_search": "live" if meta.get("web_search", True) else "off",

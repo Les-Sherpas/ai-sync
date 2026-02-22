@@ -32,7 +32,7 @@ class GeminiClient(Client):
         content = f"""---
 name: {slug}
 description: {json.dumps(meta.get("description", "AI Agent"))}
-model: {meta.get("models", {}).get("gemini", "gemini-2.0-flash-thinking-exp")}
+model: auto
 tools: {json.dumps(meta.get("tools", ["google_web_search"]))}
 ---
 

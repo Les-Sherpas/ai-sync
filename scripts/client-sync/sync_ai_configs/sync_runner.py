@@ -46,7 +46,6 @@ def load_prompt_metadata(prompt_path: Path, content: str, display: Display) -> d
     result: dict = {
         "name": to_kebab_case(prompt_path.stem),
         "description": extract_description(content),
-        "models": {"codex": "gpt-5", "cursor": "gpt-5.2", "gemini": "gemini-2.0-flash-thinking-exp"},
         "reasoning_effort": "high",
         "is_background": False,
         "web_search": True,
