@@ -6,9 +6,10 @@ try:
 except Exception:
     yaml = None
 
-ROOT = Path("/Users/loup/code/perso/ai-tools")
+ROOT = Path(__file__).resolve().parents[2]
 
-agents = len(list((ROOT / "config" / "prompts").glob("*.md")))
+prompts_dir = ROOT / "config" / "prompts"
+agents = len(list(prompts_dir.glob("*.md"))) if prompts_dir.exists() else 0
 skills_dir = ROOT / "config" / "skills"
 skills = 0
 if skills_dir.exists():

@@ -10,20 +10,23 @@ readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
 dependencies = [
+    "onepassword-sdk>=0.4.0",
     "pyyaml>=6.0",
+    "pydantic>=2,<3",
     "tomli>=2.0",
     "tomli-w>=1.0",
+    "rich>=13.0",
+    "questionary>=2.0",
+    "pytimeparse>=1.1",
 ]
 
 [project.optional-dependencies]
 dev = ["pytest>=7.0"]
 
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-
 [project.scripts]
-sync-ai-configs = "sync_ai_configs:main"
+sync-ai-configs = "sync_ai_configs.cli:main"
 
-[tool.setuptools]
-py-modules = ["sync_ai_configs", "helpers"]
-packages = ["clients"]
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["sync_ai_configs*"]
+exclude = ["tests*", "tests.*", "*.tests*", "*.tests.*"]

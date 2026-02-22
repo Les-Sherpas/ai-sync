@@ -1,6 +1,6 @@
 # Copy this file to servers.yaml in this folder and customize.
 # DO NOT commit servers.yaml - it is gitignored.
-# Secrets (API keys, OAuth tokens) go in secrets/secrets.yaml.
+# Secrets come from root .env.tpl (injected to .env via 1Password).
 #
 # methods: stdio | http | sse
 # clients: [codex, cursor, gemini] (optional; default all)
@@ -18,6 +18,8 @@ servers:
     args: ["-y", "@upstash/context7-mcp"]
     enabled: true
     timeout: 30
+    env:
+      CONTEXT7_API_KEY: "${CONTEXT7_API_KEY}"
 
   fetch:
     method: stdio
@@ -37,6 +39,8 @@ servers:
     url: https://mcp.exa.ai/mcp
     httpUrl: https://mcp.exa.ai/mcp
     enabled: true
+    env:
+      EXA_API_KEY: "${EXA_API_KEY}"
 
   google-workspace-perso:
     method: stdio
@@ -60,6 +64,8 @@ servers:
     env:
       WORKSPACE_MCP_PORT: "8010"
       WORKSPACE_MCP_CREDENTIALS_DIR: "~/.google_workspace_mcp/credentials-perso"
+      GOOGLE_OAUTH_CLIENT_ID: "${GOOGLE_OAUTH_CLIENT_ID_PERSO}"
+      GOOGLE_OAUTH_CLIENT_SECRET: "${GOOGLE_OAUTH_CLIENT_SECRET_PERSO}"
 
   google-workspace-pro:
     method: stdio
@@ -83,6 +89,8 @@ servers:
     env:
       WORKSPACE_MCP_PORT: "8012"
       WORKSPACE_MCP_CREDENTIALS_DIR: "~/.google_workspace_mcp/credentials-pro"
+      GOOGLE_OAUTH_CLIENT_ID: "${GOOGLE_OAUTH_CLIENT_ID_PRO}"
+      GOOGLE_OAUTH_CLIENT_SECRET: "${GOOGLE_OAUTH_CLIENT_SECRET_PRO}"
 
   google-maps-grounding-lite:
     method: http
@@ -90,5 +98,7 @@ servers:
     enabled: true
     oauth:
       enabled: true
+      clientId: "${GOOGLE_MAPS_GROUNDING_LITE_CLIENT_ID}"
+      clientSecret: "${GOOGLE_MAPS_GROUNDING_LITE_CLIENT_SECRET}"
       scopes:
         - https://www.googleapis.com/auth/cloud-platform

@@ -4,7 +4,10 @@ set -euo pipefail
 OSASCRIPT="/usr/bin/osascript"
 TITLE="AI Config Sync"
 MESSAGE="${1:-Sync finished}"
-# Escape for AppleScript: \ -> \\ and " -> \"
+# Normalize: strip newlines/control chars, then escape for AppleScript
+MESSAGE="${MESSAGE//$'\n'/ }"
+MESSAGE="${MESSAGE//$'\r'/}"
+MESSAGE="${MESSAGE//$'\t'/ }"
 MESSAGE_ESC="${MESSAGE//\\/\\\\}"
 MESSAGE_ESC="${MESSAGE_ESC//\"/\\\"}"
 

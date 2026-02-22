@@ -1,0 +1,29 @@
+import pytest
+
+from sync_ai_configs.env_loader import interpolate_env_refs, resolve_env_refs_in_obj
+from sync_ai_configs.op_inject import parse_injected_env
+
+
+def test_interpolate_env_refs_supports_both_forms() -> None:
+    env = {"A": "1", "B": "2"}
+    assert interpolate_env_refs("$A-${B}", env) == "1-2"
+
+
+def test_interpolate_env_refs_missing_raises() -> None:
+    with pytest.raises(RuntimeError):
+        interpolate_env_refs("$MISSING", {})
+
+
+def test_resolve_env_refs_nested() -> None:
+    data = {"x": ["$A", {"y": "${B}"}]}
+    assert resolve_env_refs_in_obj(data, {"A": "foo", "B": "bar"}) == {"x": ["foo", {"y": "bar"}]}
+
+
+def test_parse_injected_env() -> None:
+    content = "A=1\n# c\nB=2\n"
+    assert parse_injected_env(content) == {"A": "1", "B": "2"}
+
+
+def test_parse_injected_env_rejects_invalid() -> None:
+    with pytest.raises(RuntimeError):
+        parse_injected_env("export A=1\n")

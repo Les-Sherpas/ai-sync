@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="/Users/loup/code/perso/ai-tools"
-SYNC_SCRIPT="${ROOT}/scripts/client-sync/sync_ai_configs.py"
-WATCHEXEC="$(command -v watchexec)"
-NOTIFY_SCRIPT="${ROOT}/scripts/auto-sync/notify_sync.sh"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+RUN_ONCE_SCRIPT="${ROOT}/scripts/auto-sync/run_sync_once.sh"
+WATCHEXEC="$(command -v watchexec || true)"
 ERR_LOG="/tmp/ai-tools-sync.err.log"
+MAX_LOG_SIZE=$((5 * 1024 * 1024))
+MAX_LOG_FILES=3
 
 rotate_log() {
   local path="$1"
@@ -43,17 +44,12 @@ if [ ! -x "$WATCHEXEC" ]; then
   exit 1
 fi
 
-rotate_log "$ERR_LOG" $((5 * 1024 * 1024)) 1000
-
-VENV_PYTHON="${ROOT}/scripts/.venv/bin/python3"
-if [ ! -x "$VENV_PYTHON" ]; then
-  echo "Virtualenv python not found at ${VENV_PYTHON}. Run: ${ROOT}/scripts/auto-sync/install_auto_sync.sh" >&2
-  exit 1
-fi
+rotate_log "$ERR_LOG" "$MAX_LOG_SIZE" "$MAX_LOG_FILES"
 
 exec "$WATCHEXEC" \
   -w "${ROOT}/config/mcp-servers" \
   -w "${ROOT}/config/prompts" \
   -w "${ROOT}/config/skills" \
   -w "${ROOT}/config/client-settings" \
-  -- "output=\$(${VENV_PYTHON} \"${SYNC_SCRIPT}\" --plain 2>&1); exit_code=\$?; echo \"\$output\"; summary=\$(${VENV_PYTHON} \"${ROOT}/scripts/shared/sync_summary.py\" 2>/dev/null || true); [ -n \"\$summary\" ] || summary='agents=? skills=? servers=?'; if [ \"\$exit_code\" -eq 0 ]; then msg=\"Sync finished (\$summary)\"; else err=\$(echo \"\$output\" | grep 'Sync failed:' | head -1 | sed 's/.*Sync failed: //' | head -c 200); if [ -n \"\$err\" ]; then msg=\"Sync failed: \$err\"; else msg=\"Sync failed (\$summary)\"; fi; fi; \"${NOTIFY_SCRIPT}\" \"\$msg\""
+  --shell none \
+  -- "$RUN_ONCE_SCRIPT"

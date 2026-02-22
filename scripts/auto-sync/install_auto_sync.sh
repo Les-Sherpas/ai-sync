@@ -5,18 +5,36 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 LABEL="com.loup.ai-tools.sync"
 PLIST_PATH="${HOME}/Library/LaunchAgents/${LABEL}.plist"
 VENV_DIR="${ROOT}/scripts/.venv"
-WATCHEXEC="/opt/homebrew/bin/watchexec"
-PYTHON="/opt/homebrew/bin/python3"
+WATCHEXEC="$(command -v watchexec || true)"
+PYTHON="$(command -v python3 || true)"
 
 FORCE=0
-case "${1:-}" in
-  --force) FORCE=1; shift ;;
-  -h|--help)
-    echo "Usage: $0 [--force]"
-    echo "  --force  Discard and reinstall from scratch (removes venv, LaunchAgent)"
-    exit 0
-    ;;
-esac
+OP_ACCOUNT_ARG=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --force) FORCE=1; shift ;;
+    --op-account)
+      if [[ -n "${2:-}" && "$2" != --* ]]; then
+        OP_ACCOUNT_ARG="$2"; shift 2
+      else
+        echo "Error: --op-account requires a value (e.g. --op-account Employee)" >&2
+        exit 1
+      fi
+      ;;
+    -h|--help)
+      echo "Usage: $0 [--op-account NAME] [--force]"
+      echo "  --op-account N  Install export OP_ACCOUNT=N in shell rc (optional if OP_ACCOUNT already set)"
+      echo "  --force         Discard and reinstall from scratch"
+      exit 0
+      ;;
+    *) shift ;;
+  esac
+done
+OP_ACCOUNT="${OP_ACCOUNT_ARG:-$OP_ACCOUNT}"
+if [[ -z "${OP_ACCOUNT:-}" ]]; then
+  echo "Error: --op-account NAME or OP_ACCOUNT env required. Example: $0 --op-account Employee" >&2
+  exit 1
+fi
 
 if [ "$FORCE" -eq 1 ]; then
   echo "Force reinstall: discarding existing auto-sync setup..."
@@ -27,11 +45,7 @@ if [ "$FORCE" -eq 1 ]; then
   echo "  Removed LaunchAgent and venv."
 fi
 
-if [ ! -x "$PYTHON" ]; then
-  PYTHON="/usr/bin/python3"
-fi
-
-if [ ! -x "$PYTHON" ]; then
+if [ -z "$PYTHON" ]; then
   cat <<'MSG' >&2
 Python 3 not found. Install it, then re-run this script.
 Recommended: brew install python
@@ -39,28 +53,33 @@ MSG
   exit 1
 fi
 
-if [ -x /opt/homebrew/bin/brew ]; then
-  if [ ! -x "$WATCHEXEC" ]; then
+if [ -z "$WATCHEXEC" ]; then
+  if command -v brew >/dev/null 2>&1; then
     echo "Installing watchexec..."
-    /opt/homebrew/bin/brew install watchexec
-  fi
-else
-  if [ ! -x "$WATCHEXEC" ]; then
-    echo "watchexec not found at ${WATCHEXEC}. Install with: brew install watchexec" >&2
-    exit 1
+    brew install watchexec
+    WATCHEXEC="$(command -v watchexec || true)"
   fi
 fi
+if [ -z "$WATCHEXEC" ]; then
+  echo "watchexec not found. Install with: brew install watchexec" >&2
+  exit 1
+fi
+
+# 1Password: sync uses the Python SDK (onepassword-sdk). Auth via OP_SERVICE_ACCOUNT_TOKEN
+# or OP_ACCOUNT with desktop app. No op CLI required.
 
 if [ ! -x "${VENV_DIR}/bin/python3" ]; then
   echo "Creating venv at ${VENV_DIR}..."
   "$PYTHON" -m venv "$VENV_DIR"
   echo "Installing dependencies..."
-  "$VENV_DIR/bin/pip" install -r "${ROOT}/scripts/client-sync/requirements.txt"
 fi
+"$VENV_DIR/bin/pip" install -e "${ROOT}/scripts/client-sync[dev]"
 
 /bin/chmod +x "${ROOT}/scripts/auto-sync/watch_ai_sync.sh"
+/bin/chmod +x "${ROOT}/scripts/auto-sync/run_sync_once.sh"
 /bin/chmod +x "${ROOT}/scripts/auto-sync/notify_sync.sh"
-/bin/chmod +x "${ROOT}/scripts/shared/sync_summary.py"
+[ -f "${ROOT}/scripts/shared/sync_summary.py" ] && /bin/chmod +x "${ROOT}/scripts/shared/sync_summary.py"
+[ -f "${ROOT}/scripts/shared/op_account_install.py" ] && /bin/chmod +x "${ROOT}/scripts/shared/op_account_install.py"
 
 VERSION_LOCK="${ROOT}/scripts/.client-versions.json"
 if [ ! -f "$VERSION_LOCK" ]; then
@@ -82,7 +101,7 @@ cat <<PLIST > "$PLIST_PATH"
       <string>/bin/zsh</string>
       <string>-l</string>
       <string>-c</string>
-      <string>source ~/.zshrc 2>/dev/null || true; exec ${ROOT}/scripts/auto-sync/watch_ai_sync.sh</string>
+      <string>source ~/.zshrc 2>/dev/null || true; exec "${ROOT}/scripts/auto-sync/watch_ai_sync.sh"</string>
     </array>
 
     <key>RunAtLoad</key>
@@ -108,5 +127,7 @@ launchctl bootout "gui/$(id -u)" "$PLIST_PATH" >/dev/null 2>&1 || true
 launchctl bootstrap "gui/$(id -u)" "$PLIST_PATH"
 
 launchctl list | /usr/bin/grep "$LABEL" || true
+
+"$PYTHON" "${ROOT}/scripts/shared/op_account_install.py" "$OP_ACCOUNT"
 
 printf "Installed %s\n" "$PLIST_PATH"

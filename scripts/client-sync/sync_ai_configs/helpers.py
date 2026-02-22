@@ -1,5 +1,9 @@
-"""Shared helpers for sync_ai_configs."""
+"""Shared helper utilities for sync_ai_configs."""
+
+from __future__ import annotations
+
 import filecmp
+import os
 import re
 import shutil
 import tarfile
@@ -12,9 +16,6 @@ _BACKUP_ROOT: Path | None = None
 
 @contextmanager
 def backup_context(root: Path | None):
-    """Context manager that sets the backup root for the duration of the block.
-    Use this instead of set_backup_root() for explicit scoping and testability.
-    Pass None to disable backups."""
     global _BACKUP_ROOT
     prev = _BACKUP_ROOT
     _BACKUP_ROOT = root
@@ -29,12 +30,11 @@ def _get_backup_root() -> Path | None:
 
 
 def backup_path(path: Path) -> None:
-    """Create a tar.gz backup of path (file or dir) before overwriting. No-op if path doesn't exist."""
     root = _get_backup_root()
     if not path.exists() or root is None:
         return
     try:
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
         try:
             rel = path.relative_to(Path.home())
         except ValueError:
@@ -51,34 +51,37 @@ def backup_path(path: Path) -> None:
 
 
 def parse_duration_seconds(value: str | int | float) -> int:
-    """Parse duration string (e.g. '30s', '1m20s', '2h') or number into seconds.
-    Uses pytimeparse. Returns integer seconds. Raises ValueError for invalid input."""
     from pytimeparse import parse as timeparse
 
     if isinstance(value, (int, float)):
         return int(value)
-    s = str(value).strip()
-    result = timeparse(s)
+    result = timeparse(str(value).strip())
     if result is None:
         raise ValueError(f"Invalid duration: {value!r}")
     return int(result)
 
 
 def to_kebab_case(name: str) -> str:
-    """Converts snake_case or mixed strings to kebab-case."""
-    s = re.sub(r"[_ ]+", "-", name)
-    return s.lower()
+    return re.sub(r"[_ ]+", "-", name).lower()
 
 
 def ensure_dir(path: Path) -> None:
-    if not path.exists():
-        path.mkdir(parents=True)
+    path.mkdir(parents=True, exist_ok=True)
+
+
+@contextmanager
+def _atomic_write(path: Path):
+    tmp = path.with_suffix(f"{path.suffix}.{os.getpid()}.tmp")
+    try:
+        with open(tmp, "w", encoding="utf-8") as f:
+            yield f
+        tmp.replace(path)
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise
 
 
 def write_content_if_different(path: Path, content: str, *, backup: bool = True) -> bool:
-    """Writes content to path only if it would change the file.
-    Backs up before overwriting when backup=True. Returns True if wrote.
-    """
     if path.exists():
         try:
             with open(path, "r", encoding="utf-8") as f:
@@ -86,17 +89,16 @@ def write_content_if_different(path: Path, content: str, *, backup: bool = True)
                     return False
             if backup:
                 backup_path(path)
-        except (OSError, UnicodeDecodeError):
+        except (OSError, UnicodeDecodeError) as exc:
+            print(f"  Warning: Could not read {path}, skipping: {exc}")
             return False
     ensure_dir(path.parent)
-    with open(path, "w", encoding="utf-8") as f:
+    with _atomic_write(path) as f:
         f.write(content)
     return True
 
 
 def deep_merge(base: dict, overlay: dict) -> dict:
-    """Deep-merge overlay into base. Returns new dict.
-    Dict values are recursively merged; other values (including lists) are replaced by overlay, not deep-copied."""
     result: dict = {}
     for k, v in base.items():
         result[k] = dict(v) if isinstance(v, dict) else v
@@ -109,9 +111,6 @@ def deep_merge(base: dict, overlay: dict) -> dict:
 
 
 def copy_file_if_different(src: Path, dst: Path, *, backup: bool = True) -> bool:
-    """Copies src to dst only if dst doesn't exist or has different content.
-    Backs up before overwriting when backup=True. Returns True if copied.
-    """
     if not src.exists():
         return False
     if dst.exists() and filecmp.cmp(src, dst, shallow=False):
@@ -119,19 +118,17 @@ def copy_file_if_different(src: Path, dst: Path, *, backup: bool = True) -> bool
     if dst.exists() and backup:
         backup_path(dst)
     ensure_dir(dst.parent)
-    shutil.copy2(src, dst)
+    tmp = dst.with_suffix(f"{dst.suffix}.{os.getpid()}.tmp")
+    try:
+        shutil.copy2(src, tmp)
+        tmp.replace(dst)
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise
     return True
 
 
-def sync_tree_if_different(
-    src: Path, dst: Path, skip_patterns: set[str], *, backup: bool = True
-) -> bool:
-    """
-    Copies src tree to dst; overwrites existing files that differ.
-    Skips paths containing any component in skip_patterns.
-    Does not remove files in dst that are not in src (untracked left alone).
-    Returns True if any change was made.
-    """
+def sync_tree_if_different(src: Path, dst: Path, skip_patterns: set[str], *, backup: bool = True) -> bool:
     changed = False
 
     def should_skip(relative_path: Path) -> bool:
@@ -145,14 +142,18 @@ def sync_tree_if_different(
                 if target.exists() and backup:
                     backup_path(target)
                 ensure_dir(target.parent)
-                shutil.copy2(item, target)
+                tmp = target.with_suffix(f"{target.suffix}.{os.getpid()}.tmp")
+                try:
+                    shutil.copy2(item, tmp)
+                    tmp.replace(target)
+                except BaseException:
+                    tmp.unlink(missing_ok=True)
+                    raise
                 changed = True
-
     return changed
 
 
 def extract_description(content: str) -> str:
-    """Extracts a short description from the markdown content."""
     match = re.search(r"## Task\s+(.*)", content, re.IGNORECASE | re.DOTALL)
     if match:
         desc = match.group(1).strip().split("\n")[0]
@@ -161,3 +162,33 @@ def extract_description(content: str) -> str:
         if line.strip() and not line.startswith("#"):
             return line.strip()[:100]
     return "AI Agent"
+
+
+def validate_servers_yaml(data: dict) -> list[str]:
+    errors: list[str] = []
+    if not isinstance(data, dict):
+        return ["servers.yaml root must be a mapping"]
+    servers = data.get("servers")
+    if servers is not None and not isinstance(servers, dict):
+        errors.append("'servers' must be a mapping")
+        return errors
+    for sid, srv in (servers or {}).items():
+        if not isinstance(srv, dict):
+            errors.append(f"Server '{sid}' must be a mapping")
+            continue
+        if "method" in srv and srv["method"] not in ("stdio", "http", "sse"):
+            errors.append(
+                f"Server '{sid}': invalid method '{srv['method']}' (expected stdio/http/sse)"
+            )
+        clients = srv.get("clients")
+        if clients is not None and not isinstance(clients, list):
+            errors.append(f"Server '{sid}': 'clients' must be a list, got {type(clients).__name__}")
+        elif isinstance(clients, list):
+            for c in clients:
+                if not isinstance(c, str):
+                    errors.append(
+                        f"Server '{sid}': client entries must be strings, got {type(c).__name__}"
+                    )
+        if srv.get("method", "stdio") == "stdio" and not srv.get("command"):
+            errors.append(f"Server '{sid}': stdio server must have a 'command'")
+    return errors
