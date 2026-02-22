@@ -1,20 +1,38 @@
-# Copy to settings.yaml. Schema:
+# Copy to settings.yaml and customize. Synced to Codex, Cursor, Gemini via sync-ai-configs.
+#
+# Schema:
 #
 #   subagents: true | false
-#     Enable multi-agents, sub-agents, child-prompts, AGENTS.md scope, etc.
+#     Enable multi-agents, sub-agents, child-prompts, AGENTS.md scope.
+#     Codex: features.multi_agent, features.child_agents_md
+#     Gemini: experimental.enableAgents
+#     Cursor: (no direct mapping)
 #
 #   mode: ask | ask-once | full-access
-#     ask         = prompt for approval every time
-#     ask-once    = auto-approve safe ops, ask for risky ones (ask-first where supported)
+#     ask         = prompt for approval every time before acting
+#     ask-once    = auto-approve safe ops, ask for risky ones (where supported)
 #     full-access = no approval prompts, no restrictions (YOLO)
 #
-#   tools.sandbox: true | false
-#     Gemini only. Disable to allow uvx/MCP servers that need temp files. Default: true.
+#   suppress_unstable_features_warning: true | false
+#     Codex only. Suppress "Under-development features" warning for child_agents_md, etc.
+#     Default: false
 #
-# Client mapping (from official docs):
-#   Codex:  approval_policy, sandbox_mode, features.multi_agent, features.child_agents_md
-#   Gemini: general.defaultApprovalMode, experimental.enableAgents, tools.sandbox
-#   Cursor: permissions.allow, permissions.deny (Shell, Read, Write, WebFetch, Mcp)
+#   tools.sandbox: true | false
+#     Gemini only. When false, disables sandbox for MCP/tools (allows uvx, temp files).
+#     Set to false if MCP servers like workspace-mcp need filesystem access.
+#     Default: true
+#
+# Client targets:
+#   Codex:  ~/.codex/config.toml
+#   Gemini: ~/.gemini/settings.json
+#   Cursor: ~/.cursor/cli-config.json
 
 subagents: true
 mode: ask-once
+
+# Codex: suppress "Under-development features" warning
+suppress_unstable_features_warning: true
+
+# Gemini: allow MCP servers that need filesystem (uvx, workspace-mcp)
+tools:
+  sandbox: false

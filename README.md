@@ -10,7 +10,7 @@ This repo provides:
 - **Skills** – Agent Skills (SKILL.md) mirrored to all clients
 - **MCP servers** – Model Context Protocol servers with centralized config and secrets
 - **Client configuration** – Generic settings (subagents, mode) derived into client-specific configs
-- **OAuth token portability** – Capture and restore MCP OAuth caches across machines
+- **OAuth token portability** – Manual copy of client OAuth caches across machines (automated capture/restore planned)
 
 All syncing is **idempotent**: identical targets cause no writes; changed targets are backed up (`tar.gz`) before overwrite.
 
@@ -21,7 +21,6 @@ All syncing is **idempotent**: identical targets cause no writes; changed target
 ```bash
 pip install -r scripts/requirements.txt
 sync-ai-configs
-# Or: pip install -r scripts/client-sync/requirements.txt && python scripts/client-sync/sync_ai_configs.py
 ```
 
 ### Auto-sync (LaunchAgent + notifications)
@@ -29,10 +28,10 @@ sync-ai-configs
 Use the installer to set up a LaunchAgent that watches changes and syncs automatically with notifications:
 
 ```bash
-/Users/loup/code/perso/ai-tools/scripts/auto-sync/install_auto_sync.sh
+./scripts/auto-sync/install_auto_sync.sh --op-account NAME
 ```
 
-Notes:
+Requires `--op-account` (or `OP_ACCOUNT` env). Notes:
 - Creates a venv at `scripts/.venv/` and runs syncs inside it.
 - Enforces the repo-owned `scripts/.client-versions.json` (major/minor must match installed clients).
 - Auto-sync is blocked and a notification is shown if client major/minor versions differ.
@@ -59,24 +58,20 @@ Notes:
 │   │   │   └── SKILL.md
 │   │   └── ...
 │   ├── mcp-servers/
-│   │   ├── servers.yaml        # Canonical MCP server manifest
-│   │   └── secrets/
-│   │       ├── secrets.example.yaml
-│   │       ├── secrets.yaml    # Gitignored – API keys, OAuth credentials
-│   │       ├── codex-auth.json # Gitignored – OAuth cache (captured)
-│   │       └── gemini-mcp-oauth-tokens.json
+│   │   ├── servers.example.yaml  # Template – copy to servers.yaml
+│   │   └── servers.yaml         # Gitignored – your MCP manifest
 │   └── client-settings/
 │       ├── settings.example.yaml  # Template (tracked)
 │       └── settings.yaml          # Local overrides (gitignored; copy from example)
 ├── scripts/
 │   ├── auto-sync/             # LaunchAgent + notifications
 │   │   ├── install_auto_sync.sh
-│   │   ├── watch_ai_sync.sh
+│   │   ├── watch_sync.py
+│   │   ├── run_sync_once.sh
 │   │   └── notify_sync.sh
 │   ├── client-sync/           # Python: sync-ai-configs
 │   │   ├── pyproject.toml
-│   │   ├── sync_ai_configs.py
-│   │   ├── clients/
+│   │   ├── sync_ai_configs/
 │   │   ├── tests/
 │   │   └── ...
 │   └── shared/                # Shared helpers (summaries)
@@ -84,7 +79,8 @@ Notes:
 ├── scripts/requirements.txt
 ├── scripts/.client-versions.json
 ├── scripts/.venv/
-└── .sync_backups/              # Tar.gz backups before overwrite
+├── .env.tpl                     # MCP secrets (op:// refs resolved via 1Password)
+└── .sync_backups/               # Tar.gz backups before overwrite
 ```
 
 ---
@@ -104,13 +100,19 @@ Run from the **repository root** so the script finds `config/prompts/`, `config/
 | Option | Description |
 |--------|--------------|
 | (none) | Full sync: agents → skills → MCP servers → client config |
-| `--capture-oauth` | Copy OAuth token caches from clients into `config/mcp-servers/secrets/` for portability |
+| `--force` | Update `scripts/.client-versions.json` with local client versions, then sync |
+| `--clear` | Clear agents, skills, and MCP config before syncing |
+| `--backup` | With `--clear`: back up configs before clearing |
+| `--no-interactive` | Skip interactive prompts |
+| `--plain` | Plain output (implies `--no-interactive`) |
+| `--override` / `--override-json` | Override manifest leaf values (e.g. `/servers/context7/enabled=false`) |
+| `--op-account` | 1Password account name for desktop auth (install export in shell rc) |
 
 ### Sync order
 
 1. **Agents** – From `config/prompts/*.md` → `~/.codex/agents/`, `~/.cursor/agents/`, `~/.gemini/agents/`
 2. **Skills** – From `config/skills/*/` → `~/.codex/skills/`, `~/.cursor/skills/`, `~/.gemini/skills/`
-3. **MCP servers** – From `config/mcp-servers/servers.yaml` → client MCP configs, OAuth cache restore
+3. **MCP servers** – From `config/mcp-servers/servers.yaml` → client MCP configs, MCP instructions
 4. **Client config** – From `config/client-settings/settings.yaml` → approval policy, sandbox, features
 
 ### Sync strategy
@@ -196,11 +198,11 @@ servers:
     trust: true                        # Optional; Cursor/Gemini: auto-approve tools
 ```
 
-**STDIO servers** – `command`, `args`; env vars come from `secrets.yaml`.
+**STDIO servers** – `command`, `args`; env vars use `"${VAR}"` refs resolved from `.env.tpl`.
 
 **HTTP/SSE servers** – `url`, `httpUrl`; optional `bearer_token_env_var` for Codex.
 
-**HTTP with OAuth** – `httpUrl` + `oauth.enabled: true`; `clientId`/`clientSecret` from `secrets.yaml`:
+**HTTP with OAuth** – `httpUrl` + `oauth.enabled: true`; `clientId`/`clientSecret` from `.env.tpl` via `"${VAR}"`:
 
 ```yaml
   google-maps-grounding-lite:
@@ -208,6 +210,8 @@ servers:
     httpUrl: https://mapstools.googleapis.com/mcp
     oauth:
       enabled: true
+      clientId: "${GOOGLE_MAPS_GROUNDING_LITE_CLIENT_ID}"
+      clientSecret: "${GOOGLE_MAPS_GROUNDING_LITE_CLIENT_SECRET}"
 ```
 
 ### Configured servers
@@ -222,28 +226,20 @@ servers:
 | google-workspace-pro | stdio | Gmail, Calendar, Drive (work @sherpas.com, separate OAuth) |
 | google-maps-grounding-lite | http | Maps grounding (OAuth) |
 
-### Secrets (`config/mcp-servers/secrets/secrets.yaml`)
+### Secrets (`.env.tpl`)
 
-Create from `secrets.example.yaml` and fill values. **Never commit** – folder is gitignored.
+All MCP secrets live in `.env.tpl` at the repo root. Use `op://` references for 1Password:
 
-```yaml
-servers:
-  context7:
-    env:
-      CONTEXT7_API_KEY: "..."
-  google-workspace-perso:
-    env: { GOOGLE_OAUTH_CLIENT_ID: "...", GOOGLE_OAUTH_CLIENT_SECRET: "..." }
-  google-workspace-pro:
-    env: { GOOGLE_OAUTH_CLIENT_ID: "...", GOOGLE_OAUTH_CLIENT_SECRET: "..." }
-  # workspace-mcp: add redirect URIs (localhost:8010, 8012/oauth2callback) to respective OAuth clients
-  google-maps-grounding-lite:
-    oauth:
-      clientId: "..."
-      clientSecret: "..."
-  <other>:
-    env: { ... }           # API keys, bearer tokens
-    auth: { ... }           # Cursor OAuth (CLIENT_ID, CLIENT_SECRET)
 ```
+CONTEXT7_API_KEY=op://Private/AI Tools Secrets/CONTEXT7_API_KEY
+EXA_API_KEY=op://Private/AI Tools Secrets/EXA_API_KEY
+GOOGLE_OAUTH_CLIENT_ID_PERSO=op://Private/AI Tools Secrets/GOOGLE_OAUTH_CLIENT_ID_PERSO
+...
+```
+
+In `servers.yaml`, reference them with `"${VAR_NAME}"` in each server's `env` or `oauth` block. The sync script resolves these at runtime via 1Password (requires `OP_ACCOUNT` or `OP_SERVICE_ACCOUNT_TOKEN`).
+
+**Requirements**: [1Password CLI](https://developer.1password.com/docs/cli) and either `OP_ACCOUNT` (desktop app) or `OP_SERVICE_ACCOUNT_TOKEN` (service account).
 
 ### Client targets
 
@@ -256,18 +252,7 @@ servers:
 
 ### OAuth token portability
 
-Some MCP servers use OAuth. To avoid re-authenticating on each new machine:
-
-1. **Capture** (on machine A, after logging in):  
-   `sync-ai-configs --capture-oauth`
-2. Sync `config/mcp-servers/secrets/` via a secure channel (rsync, 1Password, etc.)
-3. **Restore** (on machine B): Run `sync-ai-configs` – OAuth caches are restored automatically
-
-| Client | Token cache (client) | Stash (repo) |
-|--------|----------------------|--------------|
-| Codex | `~/.codex/auth.json` | `config/mcp-servers/secrets/codex-auth.json` |
-| Gemini | `~/.gemini/mcp-oauth-tokens.json` | `config/mcp-servers/secrets/gemini-mcp-oauth-tokens.json` |
-| Cursor | TBD | TBD |
+OAuth tokens are stored per client (e.g. `~/.gemini/mcp-oauth-tokens.json`). To move them between machines, copy the client token files manually via a secure channel (rsync, 1Password, etc.). Automated capture/restore is planned.
 
 ---
 
@@ -277,10 +262,14 @@ Single YAML definition → derived into Codex, Gemini, and Cursor.
 
 ### Schema (`config/client-settings/settings.yaml`)
 
+Copy from `settings.example.yaml`. See that file for full schema.
+
 | Key | Values | Description |
 |-----|--------|-------------|
-| `subagents` | `true` \| `false` | Enable multi-agents, sub-agents, child-prompts, AGENTS.md, etc. |
+| `subagents` | `true` \| `false` | Enable multi-agents, sub-agents, child-prompts, AGENTS.md |
 | `mode` | `ask` \| `ask-once` \| `full-access` | Approval / restriction mode |
+| `suppress_unstable_features_warning` | `true` \| `false` | Codex only. Suppress "Under-development features" warning |
+| `tools.sandbox` | `true` \| `false` | Gemini only. When false, allow MCP tools filesystem access (uvx, etc.) |
 
 ### Mode semantics
 
@@ -295,6 +284,8 @@ Single YAML definition → derived into Codex, Gemini, and Cursor.
 | Generic | Codex | Gemini | Cursor |
 |----------|-------|--------|--------|
 | **subagents: true** | `features.multi_agent`, `features.child_agents_md` | `experimental.enableAgents` | — |
+| **suppress_unstable_features_warning** | `suppress_unstable_features_warning` | — | — |
+| **tools.sandbox: false** | — | `tools.sandbox` | — |
 | **mode: ask** | `approval_policy=on-request`, `sandbox_mode=workspace-write` | `general.defaultApprovalMode=default` | `permissions: {allow:[], deny:[]}` |
 | **mode: ask-once** | `approval_policy=untrusted`, `sandbox_mode=workspace-write` | `general.defaultApprovalMode=auto_edit` | same as `ask` |
 | **mode: full-access** | `approval_policy=never`, `sandbox_mode=danger-full-access` | `general.defaultApprovalMode=yolo` | `allow: [Shell(*), Read(*), Write(*), WebFetch(*), Mcp(*:*)]` |
@@ -317,14 +308,21 @@ The sync tool lives in `scripts/client-sync/` as a Python project:
 pip install -e scripts/client-sync/
 ```
 
-Dependencies: `pyyaml>=6.0`, `tomli>=2.0`, `tomli-w>=1.0`
+Dependencies: `pyyaml>=6.0`, `tomli>=2.0`, `tomli-w>=1.0`, `watchfiles>=0.21`, and others (see `pyproject.toml`).
+
+### Testing
+
+```bash
+pip install -e "scripts/client-sync[dev]"
+pytest scripts/client-sync/tests/
+```
 
 ---
 
 ## .gitignore
 
-- `config/mcp-servers/secrets/*` (except `secrets.example.yaml`)
-- `config/client-settings/settings.yaml`
+- `config/mcp-servers/servers.yaml` (copy from `servers.example.yaml`)
+- `config/client-settings/settings.yaml` (copy from `settings.example.yaml`)
 - `knowledge-base/*`
 - `.sync_backups/`
 - `.env`, Python bytecode, virtual envs, `.pytest_cache/`, `node_modules/`, `.DS_Store`, etc.
@@ -337,16 +335,16 @@ Dependencies: `pyyaml>=6.0`, `tomli>=2.0`, `tomli-w>=1.0`
 
 1. Clone repo
 2. `pip install -r scripts/requirements.txt`
-3. Create `config/mcp-servers/secrets/secrets.yaml` from `secrets.example.yaml` and fill API keys
-4. Copy `config/client-settings/settings.example.yaml` to `config/client-settings/settings.yaml` and edit if needed
-5. (Optional) Copy OAuth caches into `config/mcp-servers/secrets/` if synced from another machine
+3. Copy `config/mcp-servers/servers.example.yaml` to `config/mcp-servers/servers.yaml`
+4. Ensure `.env.tpl` has correct 1Password refs; set `OP_ACCOUNT` or `OP_SERVICE_ACCOUNT_TOKEN`
+5. Copy `config/client-settings/settings.example.yaml` to `config/client-settings/settings.yaml` and edit if needed
 6. `sync-ai-configs`
 7. For Codex HTTP MCP servers: `source ~/.codex/mcp.env` in shell profile
 
 ### Adding an MCP server
 
 1. Edit `config/mcp-servers/servers.yaml`
-2. Add secrets to `config/mcp-servers/secrets/secrets.yaml`
+2. Add required vars to `.env.tpl` (use `op://` refs for secrets)
 3. Run `sync-ai-configs`
 
 ### Adding an agent

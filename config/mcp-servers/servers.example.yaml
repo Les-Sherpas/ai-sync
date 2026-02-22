@@ -1,10 +1,27 @@
 # Copy this file to servers.yaml in this folder and customize.
 # DO NOT commit servers.yaml - it is gitignored.
-# Secrets come from root .env.tpl (injected to .env via 1Password).
 #
-# methods: stdio | http | sse
-# clients: [codex, cursor, gemini] (optional; default all)
-# description: optional, helps LLM choose the right server (Gemini supports this)
+# Secrets: Use .env.tpl at repo root. Values with op:// refs are resolved via 1Password.
+# In server env: use "${VAR_NAME}" to reference .env.tpl variables.
+#
+# Top-level keys:
+#   global.instructions  - MCP selection guidance (e.g. which Google Workspace to use).
+#                          Synced to Codex developer_instructions, Cursor rules, Gemini GEMINI.md.
+#   servers.<id>         - One entry per MCP server.
+#
+# Per-server options:
+#   method: stdio | http | sse
+#   command, args        - For stdio: command to run (e.g. npx, python, uvx).
+#   url, httpUrl         - For http/sse: server URL. Use httpUrl for Gemini OAuth.
+#   enabled: true|false  - Default: true.
+#   clients: [codex, cursor, gemini] - Restrict to specific clients. Omit = all.
+#   description         - Helps LLM choose the right server (Gemini supports this).
+#   trust: true         - Cursor/Gemini: auto-approve tools without prompting.
+#   timeout              - Startup/tool timeout (seconds or "30s").
+#   env                  - Env vars for the process. Use "${VAR}" for .env.tpl values.
+#   oauth.enabled: true  - For HTTP servers with OAuth (e.g. google-maps-grounding-lite).
+#   oauth.clientId, clientSecret, scopes - From env or inline. Use "${VAR}" for secrets.
+#   bearer_token_env_var - Codex only. Env var name for bearer token; exported to ~/.codex/mcp.env.
 
 global:
   instructions: >

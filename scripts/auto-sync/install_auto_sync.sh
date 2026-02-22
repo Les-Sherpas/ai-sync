@@ -5,7 +5,6 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 LABEL="com.loup.ai-tools.sync"
 PLIST_PATH="${HOME}/Library/LaunchAgents/${LABEL}.plist"
 VENV_DIR="${ROOT}/scripts/.venv"
-WATCHEXEC="$(command -v watchexec || true)"
 PYTHON="$(command -v python3 || true)"
 
 FORCE=0
@@ -36,32 +35,24 @@ if [[ -z "${OP_ACCOUNT:-}" ]]; then
   exit 1
 fi
 
+# Stop, kill, and remove previous auto-sync before install
+echo "Stopping previous auto-sync..."
+launchctl bootout "gui/$(id -u)" "$PLIST_PATH" 2>/dev/null || true
+pkill -f "watch_sync.py" 2>/dev/null || true
+pkill -f "watchexec.*ai-tools" 2>/dev/null || true
+pkill -f "scripts/auto-sync/run_sync_once" 2>/dev/null || true
+[ -f "$PLIST_PATH" ] && /bin/rm -f "$PLIST_PATH"
 if [ "$FORCE" -eq 1 ]; then
-  echo "Force reinstall: discarding existing auto-sync setup..."
-  echo "  Stopping LaunchAgent..."
-  launchctl bootout "gui/$(id -u)" "$PLIST_PATH" 2>/dev/null || true
-  [ -f "$PLIST_PATH" ] && /bin/rm -f "$PLIST_PATH"
+  echo "  Force: removing venv..."
   [ -d "$VENV_DIR" ] && /bin/rm -rf "$VENV_DIR"
-  echo "  Removed LaunchAgent and venv."
 fi
+echo "  Previous auto-sync stopped and removed."
 
 if [ -z "$PYTHON" ]; then
   cat <<'MSG' >&2
 Python 3 not found. Install it, then re-run this script.
 Recommended: brew install python
 MSG
-  exit 1
-fi
-
-if [ -z "$WATCHEXEC" ]; then
-  if command -v brew >/dev/null 2>&1; then
-    echo "Installing watchexec..."
-    brew install watchexec
-    WATCHEXEC="$(command -v watchexec || true)"
-  fi
-fi
-if [ -z "$WATCHEXEC" ]; then
-  echo "watchexec not found. Install with: brew install watchexec" >&2
   exit 1
 fi
 
@@ -75,7 +66,7 @@ if [ ! -x "${VENV_DIR}/bin/python3" ]; then
 fi
 "$VENV_DIR/bin/pip" install -e "${ROOT}/scripts/client-sync[dev]"
 
-/bin/chmod +x "${ROOT}/scripts/auto-sync/watch_ai_sync.sh"
+/bin/chmod +x "${ROOT}/scripts/auto-sync/watch_sync.py"
 /bin/chmod +x "${ROOT}/scripts/auto-sync/run_sync_once.sh"
 /bin/chmod +x "${ROOT}/scripts/auto-sync/notify_sync.sh"
 [ -f "${ROOT}/scripts/shared/sync_summary.py" ] && /bin/chmod +x "${ROOT}/scripts/shared/sync_summary.py"
@@ -101,7 +92,7 @@ cat <<PLIST > "$PLIST_PATH"
       <string>/bin/zsh</string>
       <string>-l</string>
       <string>-c</string>
-      <string>source ~/.zshrc 2>/dev/null || true; exec "${ROOT}/scripts/auto-sync/watch_ai_sync.sh"</string>
+      <string>source ~/.zshrc 2>/dev/null || true; exec "${ROOT}/scripts/.venv/bin/python" "${ROOT}/scripts/auto-sync/watch_sync.py"</string>
     </array>
 
     <key>RunAtLoad</key>
