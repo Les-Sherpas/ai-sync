@@ -99,19 +99,33 @@ def _copy_dir(src: Path, dst: Path) -> None:
     shutil.copytree(src, dst)
 
 
+def _copy_dir_if_exists(src: Path, dst: Path) -> None:
+    if not src.exists():
+        return
+    _copy_dir(src, dst)
+
+
+def _copy_file_if_exists(src: Path, dst: Path) -> None:
+    if not src.exists():
+        return
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(src, dst)
+
+
 def _run_import(args: argparse.Namespace) -> int:
     root = ensure_layout()
     config_path = root / "config.toml"
     with _resolve_repo_source(args.repo) as repo_root:
-        src_config = repo_root / "config"
-        if not src_config.exists():
-            print(f"Missing config/ directory in {repo_root}", file=sys.stderr)
-            return 1
         dest_config = root / "config"
-        _copy_dir(src_config, dest_config)
-        src_env = repo_root / ".env.tpl"
-        if src_env.exists():
-            shutil.copy2(src_env, root / ".env.tpl")
+        _copy_dir_if_exists(repo_root / "prompts", dest_config / "prompts")
+        _copy_dir_if_exists(repo_root / "skills", dest_config / "skills")
+        _copy_dir_if_exists(repo_root / "rules", dest_config / "rules")
+        _copy_file_if_exists(repo_root / "mcp-servers.yaml", dest_config / "mcp-servers" / "servers.yaml")
+        _copy_file_if_exists(
+            repo_root / "client-settings.yaml",
+            dest_config / "client-settings" / "settings.yaml",
+        )
+        _copy_file_if_exists(repo_root / ".env.tpl", root / ".env.tpl")
     if not config_path.exists():
         print("Warning: ~/.ai-sync/config.toml is missing. Run `ai-sync setup`.", file=sys.stderr)
     print(f"Imported config from {args.repo} to {root}")

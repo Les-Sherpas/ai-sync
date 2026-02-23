@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ai-sync"
-version = "0.1.0"
+version = "0.1.2"
 description = "Self-contained AI config sync for Codex, Cursor, and Gemini."
 readme = "README.md"
 requires-python = ">=3.10"

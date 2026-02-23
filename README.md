@@ -76,6 +76,17 @@ Runtime:
 └── cache/
 ```
 
+Import repo layout:
+```
+<repo>/
+├── prompts/
+├── skills/
+├── mcp-servers.yaml
+├── client-settings.yaml
+├── .env.tpl            # optional
+└── rules/              # optional
+```
+
 ---
 
 ## ai-sync
@@ -320,29 +331,14 @@ This project is published to PyPI as `ai-sync`.
 
 1. Update version in `pyproject.toml`.
 2. Update README if anything changed in CLI behavior or setup.
-3. Install release tooling if needed:
+3. Tag and push:
 
 ```bash
-python -m pip install --upgrade build twine
+git tag vX.Y.Z
+git push origin vX.Y.Z
 ```
 
-4. Build the package:
-
-```bash
-python -m build -w .
-```
-
-5. Check the artifacts:
-
-```bash
-python -m twine check dist/*
-```
-
-6. Upload to PyPI:
-
-```bash
-python -m twine upload dist/*
-```
+4. GitHub Actions runs tests, builds artifacts, publishes to PyPI, and creates a GitHub Release.
 
 ### Notes
 
