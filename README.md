@@ -11,6 +11,7 @@ This repo provides:
 - **The ai-sync CLI** – Manage `~/.ai-sync/` and run syncs
 - **Agents** – Sub-agents derived from prompts with per-client metadata
 - **Skills** – Agent Skills (SKILL.md) mirrored to all clients
+- **Rules/commands** – Prompt snippets/shortcuts mirrored to each client’s equivalent feature
 - **MCP servers** – Model Context Protocol servers with centralized config and secrets
 - **Client configuration** – Generic settings (subagents, mode) derived into client-specific configs
 - **OAuth token portability** – Manual copy of client OAuth caches across machines (automated capture/restore planned)
@@ -116,7 +117,7 @@ Other commands: `ai-sync setup`, `ai-sync import`, `ai-sync doctor`.
 
 | Option | Description |
 |--------|--------------|
-| (none) | Full sync: agents → skills → MCP servers → client config |
+| (none) | Full sync: agents → skills → rules → MCP servers → client config |
 | `--force` | Update the packaged client version lock (dev-only), then sync |
 | `--no-interactive` | Skip interactive prompts |
 | `--plain` | Plain output (implies `--no-interactive`) |
@@ -126,12 +127,13 @@ Other commands: `ai-sync setup`, `ai-sync import`, `ai-sync doctor`.
 
 1. **Agents** – From `~/.ai-sync/config/prompts/*.md` → `~/.codex/agents/`, `~/.cursor/agents/`, `~/.gemini/agents/`
 2. **Skills** – From `~/.ai-sync/config/skills/*/` → `~/.codex/skills/`, `~/.cursor/skills/`, `~/.gemini/skills/`
-3. **MCP servers** – From `~/.ai-sync/config/mcp-servers.yaml` → client MCP configs, MCP instructions
-4. **Client config** – From `~/.ai-sync/config/client-settings.yaml` → approval policy, sandbox, features
+3. **Rules** – From `~/.ai-sync/config/rules/` → client rule/command locations
+4. **MCP servers** – From `~/.ai-sync/config/mcp-servers.yaml` → client MCP configs, MCP instructions
+5. **Client config** – From `~/.ai-sync/config/client-settings.yaml` → approval policy, sandbox, features
 
 ### Sync strategy
 
-- **Agents, skills, client config**: Files overwritten if they exist. Untracked agents/skills (not in `~/.ai-sync/config/prompts/` or `~/.ai-sync/config/skills/`) are left alone.
+- **Agents, skills, rules, client config**: Files overwritten if they exist. Untracked agents/skills/rules (not in `~/.ai-sync/config/prompts/`, `~/.ai-sync/config/skills/`, or `~/.ai-sync/config/rules/`) are left alone.
 - **Client config**: Deep-merge with existing; ai-tools keys overwrite on conflict.
 - **MCP servers**: Merged with existing; managed servers updated, user-added servers preserved.
 

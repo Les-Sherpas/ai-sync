@@ -58,6 +58,23 @@ class CodexClient(Client):
         ]
         track_write_blocks(specs)
 
+    def write_rule(self, slug: str, raw_content: str, rule_src_path: Path) -> None:
+        if rule_src_path.suffix == ".mdc":
+            target_dir = self.config_dir / "rules"
+        else:
+            target_dir = self.config_dir / "commands"
+        target_path = target_dir / rule_src_path
+        track_write_blocks(
+            [
+                WriteSpec(
+                    file_path=target_path,
+                    format="text",
+                    target=f"ai-sync:rule:{slug}",
+                    value=raw_content,
+                )
+            ]
+        )
+
     def _build_mcp_entry(self, server_id: str, server: dict, secrets: dict) -> dict:
         secret_srv = self._get_secret_for_server(server_id, secrets)
         table: dict = {"enabled": server.get("enabled", True)}

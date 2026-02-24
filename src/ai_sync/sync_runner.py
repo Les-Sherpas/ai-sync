@@ -39,6 +39,7 @@ class RunConfig:
     config_root: Path
     source_prompts: Path
     source_skills: Path
+    source_rules: Path
     source_mcp: Path
     source_client_config: Path
     source_env_template: Path
@@ -160,6 +161,32 @@ def sync_skills(config: RunConfig, display: Display) -> None:
     display.table(("Skill", "Slug", "Clients"), rows)
 
 
+def sync_rules(config: RunConfig, display: Display) -> None:
+    display.rule("Syncing Rules")
+    if not config.source_rules.exists():
+        display.print("No rules selected", style="dim")
+        return
+    rule_files = []
+    for rule_path in sorted(config.source_rules.rglob("*")):
+        if not rule_path.is_file():
+            continue
+        rel = rule_path.relative_to(config.source_rules)
+        if any(part in SKIP_PATTERNS for part in rel.parts):
+            continue
+        rule_files.append((rule_path, rel))
+    if not rule_files:
+        display.print("No rules selected", style="dim")
+        return
+    rows: list[tuple[str, ...]] = []
+    for rule_path, rel in rule_files:
+        raw_content = rule_path.read_text(encoding="utf-8")
+        slug = rel.as_posix()
+        rows.append((slug, ", ".join(c.name for c in CLIENTS)))
+        for client in CLIENTS:
+            client.write_rule(slug, raw_content, rel)
+    display.table(("Rule", "Clients"), rows)
+
+
 def _parse_structured_content(content: str, format: str) -> dict | list:
     if not content.strip():
         return {}
@@ -247,6 +274,7 @@ def execute(config: RunConfig, manifest: dict, display: Display) -> int:
     display.print(f"Source: {config.config_root}", style="info")
     sync_agents(config, display)
     sync_skills(config, display)
+    sync_rules(config, display)
     sync_mcp_servers(manifest, display)
     if config.options.install_settings:
         sync_client_config(config, display)
@@ -287,6 +315,7 @@ def run_sync(
 
     source_prompts = root / "config" / "prompts"
     source_skills = root / "config" / "skills"
+    source_rules = root / "config" / "rules"
     source_mcp = root / "config"
     source_client_config = root / "config" / "client-settings.yaml"
     source_env_template = root / ".env.tpl"
@@ -309,6 +338,7 @@ def run_sync(
         config_root=root,
         source_prompts=source_prompts,
         source_skills=source_skills,
+        source_rules=source_rules,
         source_mcp=source_mcp,
         source_client_config=source_client_config,
         source_env_template=source_env_template,

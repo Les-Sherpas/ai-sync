@@ -48,6 +48,12 @@ class DummyClient:
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(raw_content, encoding="utf-8")
 
+    def write_rule(self, slug: str, raw_content: str, rule_src_path: Path) -> None:
+        self.calls.append(f"write_rule:{self.name}:{slug}")
+        target = self.config_dir / "commands" / rule_src_path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(raw_content, encoding="utf-8")
+
     def sync_mcp(self, servers: dict, secrets: dict, for_client) -> None:
         self.calls.append(f"sync_mcp:{self.name}:{len(servers)}")
 
@@ -65,9 +71,11 @@ def _make_config_root(tmp_path: Path) -> Path:
     root = tmp_path / "root"
     (root / "config" / "prompts").mkdir(parents=True)
     (root / "config" / "skills" / "skill-one").mkdir(parents=True)
+    (root / "config" / "rules").mkdir(parents=True)
     (root / ".env.tpl").write_text("TOKEN=abc\n", encoding="utf-8")
     (root / "config" / "prompts" / "agent.md").write_text("## Task\nDo thing\n", encoding="utf-8")
     (root / "config" / "skills" / "skill-one" / "SKILL.md").write_text("# Skill\n", encoding="utf-8")
+    (root / "config" / "rules" / "shortcut.md").write_text("Do a thing\n", encoding="utf-8")
     (root / "config" / "mcp-servers.yaml").write_text(
         "servers:\n  srv:\n    method: stdio\n    command: npx\n    env:\n      TOKEN: \"$TOKEN\"\n",
         encoding="utf-8",
@@ -84,6 +92,7 @@ def test_preflight_resolves_env_and_overrides(tmp_path: Path) -> None:
         config_root=root,
         source_prompts=root / "config" / "prompts",
         source_skills=root / "config" / "skills",
+        source_rules=root / "config" / "rules",
         source_mcp=root / "config",
         source_client_config=root / "config" / "client-settings.yaml",
         source_env_template=root / ".env.tpl",
@@ -143,6 +152,7 @@ def test_preflight_missing_dirs_noop(tmp_path: Path) -> None:
         config_root=root,
         source_prompts=root / "config" / "prompts",
         source_skills=root / "config" / "skills",
+        source_rules=root / "config" / "rules",
         source_mcp=root / "config",
         source_client_config=root / "config" / "client-settings.yaml",
         source_env_template=root / ".env.tpl",
@@ -169,6 +179,7 @@ def test_sync_skills_copies_root_files(tmp_path: Path, monkeypatch) -> None:
         config_root=root,
         source_prompts=root / "config" / "prompts",
         source_skills=root / "config" / "skills",
+        source_rules=root / "config" / "rules",
         source_mcp=root / "config",
         source_client_config=root / "config" / "client-settings.yaml",
         source_env_template=root / ".env.tpl",
@@ -178,3 +189,31 @@ def test_sync_skills_copies_root_files(tmp_path: Path, monkeypatch) -> None:
     sync_runner.sync_skills(config, display)
     target = client.get_skills_dir() / "skill-one" / "reference.md"
     assert target.exists()
+
+
+def test_sync_rules_copies_files(tmp_path: Path, monkeypatch) -> None:
+    root = tmp_path / "root"
+    rules_root = root / "config" / "rules"
+    rules_root.mkdir(parents=True)
+    (rules_root / "shortcut.md").write_text("Do a thing\n", encoding="utf-8")
+    monkeypatch.setenv("HOME", str(tmp_path))
+    display = FakeDisplay()
+    calls: list[str] = []
+    client = DummyClient("codex", tmp_path, calls)
+    monkeypatch.setattr(sync_runner, "CLIENTS", [client])
+
+    config = RunConfig(
+        config_root=root,
+        source_prompts=root / "config" / "prompts",
+        source_skills=root / "config" / "skills",
+        source_rules=rules_root,
+        source_mcp=root / "config",
+        source_client_config=root / "config" / "client-settings.yaml",
+        source_env_template=root / ".env.tpl",
+        overrides=[],
+        options=SyncOptions(agent_stems=frozenset(), skill_names=frozenset(), install_settings=True),
+    )
+    sync_runner.sync_rules(config, display)
+    target = client.config_dir / "commands" / "shortcut.md"
+    assert target.exists()
+    assert "write_rule:codex:shortcut.md" in calls

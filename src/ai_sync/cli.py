@@ -40,7 +40,7 @@ def _resolve_repo_source(repo: str) -> Iterator[Path]:
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Sync AI configs (agents, skills, MCP servers) to Codex, Cursor, Gemini."
+        description="Sync AI configs (agents, skills, rules, MCP servers) to Codex, Cursor, Gemini."
     )
     subparsers = parser.add_subparsers(dest="command")
 

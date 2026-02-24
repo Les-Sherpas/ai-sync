@@ -12,6 +12,7 @@ from pathlib import Path
 import tomli
 import tomli_w
 
+
 class Client(ABC):
 
     @property
@@ -87,6 +88,10 @@ class Client(ABC):
 
     @abstractmethod
     def write_agent(self, slug: str, meta: dict, raw_content: str, prompt_src_path: Path) -> None:
+        ...
+
+    @abstractmethod
+    def write_rule(self, slug: str, raw_content: str, rule_src_path: Path) -> None:
         ...
 
     @abstractmethod
