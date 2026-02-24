@@ -254,7 +254,7 @@ def test_gemini_client_config_yolo(monkeypatch, tmp_path: Path) -> None:
     client = GeminiClient(tmp_path)
     client.sync_client_config({"mode": "yolo"}, store)
     data = json.loads((tmp_path / ".gemini" / "settings.json").read_text(encoding="utf-8"))
-    assert data["general"]["defaultApprovalMode"] == "yolo"
+    assert data["general"]["defaultApprovalMode"] == "auto_edit"
     assert data["tools"]["sandbox"] is False
 
 

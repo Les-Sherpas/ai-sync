@@ -187,7 +187,7 @@ class TestGeminiBuildClientConfig:
 
     def test_yolo(self) -> None:
         cfg = GeminiClient(Path("/tmp/test"))._build_client_config({"mode": "yolo"})
-        assert cfg["general"]["defaultApprovalMode"] == "yolo"
+        assert cfg["general"]["defaultApprovalMode"] == "auto_edit"
         assert cfg["tools"]["sandbox"] is False
 
     def test_subagents(self) -> None:
