@@ -71,16 +71,18 @@ tools: {json.dumps(meta.get("tools", ["google_web_search"]))}
         if env:
             entry["env"] = env
         if method in ("http", "sse"):
-            if server.get("url"):
-                entry["url"] = server["url"]
-            if server.get("httpUrl"):
-                entry["httpUrl"] = server["httpUrl"]
+            if url := server.get("url"):
+                entry["url"] = url
+            if server.get("headers"):
+                entry["headers"] = server["headers"]
+        if server.get("auth_provider_type"):
+            entry["authProviderType"] = str(server["auth_provider_type"])
         if server.get("trust") is True:
             entry["trust"] = True
         if server.get("description"):
             entry["description"] = str(server["description"])
         oauth_cfg = server.get("oauth", {})
-        if oauth_cfg.get("enabled") or oauth_cfg.get("authorizationUrl"):
+        if oauth_cfg.get("enabled") or oauth_cfg.get("authorizationUrl") or oauth_cfg.get("scopes"):
             oauth_src = (
                 secret_srv.get("oauth") or secret_srv.get("auth")
                 or server.get("oauth") or server.get("auth") or {}

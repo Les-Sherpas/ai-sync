@@ -41,6 +41,8 @@ from .project import (
     resolve_project_manifest,
     validate_against_registry,
 )
+from .requirements_checker import check_requirements
+from .requirements_loader import load_and_filter_requirements
 from .sync_runner import run_apply
 from .uninstall import run_uninstall
 from .version_checks import check_client_versions, get_default_versions_path
@@ -432,6 +434,13 @@ def _run_apply(args: argparse.Namespace, config_root: Path, display: Display) ->
 
     mcp_manifest = load_and_filter_mcp(repo_roots, manifest.mcp_servers, display)
 
+    req_results = check_requirements(
+        load_and_filter_requirements(repo_roots, manifest.mcp_servers, display)
+    )
+    for r in req_results:
+        if not r.ok and r.error:
+            display.print(f"Warning: {r.error}", style="warning")
+
     required_vars = collect_env_refs(mcp_manifest)
     secrets: dict = {"servers": {}}
     if required_vars:
@@ -528,6 +537,15 @@ def _run_doctor(config_root: Path, display: Display) -> int:
             display.print(f"  Gitignore: MISSING coverage for {', '.join(uncovered)}", style="warning")
         else:
             display.print("  Gitignore: OK", style="success")
+
+        req_results = check_requirements(
+            load_and_filter_requirements(repo_roots, manifest.mcp_servers, display)
+        )
+        for r in req_results:
+            if r.ok:
+                display.print(f"  \u2713 {r.name} ({r.actual})", style="success")
+            elif r.error:
+                display.print(f"  \u2717 {r.error}", style="warning")
     else:
         display.print("\nNo project found (no .ai-sync.yaml in current directory tree)", style="dim")
 
