@@ -18,7 +18,6 @@ from ai_sync.repo_store import (
     validate_slug,
 )
 
-
 # ---------------------------------------------------------------------------
 # validate_slug
 # ---------------------------------------------------------------------------
@@ -99,11 +98,11 @@ def test_save_repos_is_atomic(tmp_path: Path) -> None:
 def test_save_repos_cleans_tmp_on_failure(tmp_path: Path) -> None:
     # Patch yaml.safe_dump so the .tmp file is created first, then the write fails.
     import ai_sync.repo_store as rs_mod
-    original_dump = yaml.safe_dump
 
     def failing_dump(data: object, stream: object, **kwargs: object) -> None:
         # Write partial content so the .tmp file exists, then raise.
         import io
+
         if isinstance(stream, io.IOBase):
             stream.write("partial")  # type: ignore[arg-type]
         raise OSError("disk full")

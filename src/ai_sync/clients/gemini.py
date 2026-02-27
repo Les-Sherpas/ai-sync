@@ -84,8 +84,7 @@ tools: {json.dumps(meta.get("tools", ["google_web_search"]))}
         oauth_cfg = server.get("oauth", {})
         if oauth_cfg.get("enabled") or oauth_cfg.get("authorizationUrl") or oauth_cfg.get("scopes"):
             oauth_src = (
-                secret_srv.get("oauth") or secret_srv.get("auth")
-                or server.get("oauth") or server.get("auth") or {}
+                secret_srv.get("oauth") or secret_srv.get("auth") or server.get("oauth") or server.get("auth") or {}
             )
             client_id = (oauth_src.get("clientId") or "").strip()
             client_secret = (oauth_src.get("clientSecret") or "").strip()
@@ -110,9 +109,7 @@ tools: {json.dumps(meta.get("tools", ["google_web_search"]))}
                     raise ValueError
                 entry["timeout"] = int(sec * 1000)
             except (TypeError, ValueError):
-                print(
-                    f"  Warning: Invalid timeout_seconds for server '{server_id}': {server['timeout_seconds']!r}"
-                )
+                print(f"  Warning: Invalid timeout_seconds for server '{server_id}': {server['timeout_seconds']!r}")
         return entry
 
     def sync_mcp(self, servers: dict, secrets: dict, store: StateStore) -> None:

@@ -14,7 +14,6 @@ def display() -> PlainDisplay:
     return PlainDisplay()
 
 
-
 def test_run_install_writes_config(monkeypatch, tmp_path: Path, display: PlainDisplay) -> None:
     monkeypatch.setattr(cli, "ensure_layout", lambda: tmp_path)
     args = argparse.Namespace(op_account="Test", force=True)
@@ -54,12 +53,14 @@ def test_run_import_local_path_links_in_place(monkeypatch, tmp_path: Path, displ
 
     # repos.yaml stores the structured entry with the absolute path as source
     import yaml as _yaml
+
     repos_data = _yaml.safe_load((dest / "repos.yaml").read_text())
     abs_repo = str(repo.resolve())
     assert {"name": "my-repo", "source": abs_repo} in repos_data["repos"]
 
     # get_all_repo_roots returns the original directory directly
     from ai_sync.repo_store import get_all_repo_roots
+
     roots = get_all_repo_roots(dest)
     assert len(roots) == 1
     assert roots[0] == repo.resolve()
@@ -85,10 +86,9 @@ def test_run_import_second_repo_warns_about_defaults(monkeypatch, tmp_path: Path
     first_repo_store.mkdir(parents=True)
     (first_repo_store / "defaults.yaml").write_text("agents: []\n", encoding="utf-8")
     import yaml as _yaml
+
     (dest / "repos.yaml").write_text(
-        _yaml.safe_dump(
-            {"repos": [{"name": "first-repo", "source": "https://example.com/first-repo.git"}]}
-        )
+        _yaml.safe_dump({"repos": [{"name": "first-repo", "source": "https://example.com/first-repo.git"}]})
     )
 
     repo = tmp_path / "second-repo"
@@ -110,14 +110,13 @@ def test_run_doctor_missing_config(monkeypatch, tmp_path: Path, display: PlainDi
 def test_run_doctor_ok(monkeypatch, tmp_path: Path, display: PlainDisplay) -> None:
     monkeypatch.setattr(cli, "get_config_root", lambda: tmp_path)
     monkeypatch.setattr(cli, "find_project_root", lambda: None)
-    (tmp_path / "config.toml").write_text("op_account = \"X\"\n", encoding="utf-8")
+    (tmp_path / "config.toml").write_text('op_account = "X"\n', encoding="utf-8")
     repo_dir = tmp_path / "repos" / "my-config"
     repo_dir.mkdir(parents=True)
     import yaml as _yaml
+
     (tmp_path / "repos.yaml").write_text(
-        _yaml.safe_dump(
-            {"repos": [{"name": "my-config", "source": "https://example.com/my-config.git"}]}
-        )
+        _yaml.safe_dump({"repos": [{"name": "my-config", "source": "https://example.com/my-config.git"}]})
     )
     monkeypatch.setenv("OP_ACCOUNT", "X")
     assert cli._run_doctor(tmp_path, display) == 0
@@ -155,6 +154,7 @@ def test_run_import_force_overwrites(monkeypatch, tmp_path: Path, display: Plain
     assert cli._run_import(args2, display) == 0
 
     import yaml as _yaml
+
     repos_data = _yaml.safe_load((dest / "repos.yaml").read_text())
     entries = repos_data["repos"]
     assert len(entries) == 1
@@ -171,6 +171,7 @@ def test_run_import_force_cleans_up_remote_copy(monkeypatch, tmp_path: Path, dis
     stored_copy.mkdir(parents=True)
     (stored_copy / "old.md").write_text("old content", encoding="utf-8")
     import yaml as _yaml
+
     (dest / "repos.yaml").write_text(
         _yaml.safe_dump({"repos": [{"name": "my-repo", "source": "https://example.com/old.git"}]})
     )
@@ -205,19 +206,17 @@ def test_run_import_invalid_slug(monkeypatch, tmp_path: Path, display: PlainDisp
         assert cli._run_import(args, display) == 1, f"Expected 1 for name={bad_name!r}"
 
 
-
 def test_run_apply_success(monkeypatch, tmp_path: Path, display: PlainDisplay) -> None:
     import yaml as _yaml
+
     config_root = tmp_path / "root"
     config_root.mkdir()
-    (config_root / "config.toml").write_text("op_account = \"x\"\n", encoding="utf-8")
+    (config_root / "config.toml").write_text('op_account = "x"\n', encoding="utf-8")
     repo_dir = config_root / "repos" / "my-config"
     repo_dir.mkdir(parents=True)
     (repo_dir / "mcp-servers.yaml").write_text("servers: {}\n", encoding="utf-8")
     (config_root / "repos.yaml").write_text(
-        _yaml.safe_dump(
-            {"repos": [{"name": "my-config", "source": "https://example.com/my-config.git"}]}
-        )
+        _yaml.safe_dump({"repos": [{"name": "my-config", "source": "https://example.com/my-config.git"}]})
     )
     project_root = tmp_path / "project"
     project_root.mkdir()
@@ -232,7 +231,7 @@ def test_run_apply_success(monkeypatch, tmp_path: Path, display: PlainDisplay) -
 def test_run_init_zero_repos(monkeypatch, tmp_path: Path, display: PlainDisplay) -> None:
     config_root = tmp_path / "root"
     config_root.mkdir()
-    (config_root / "config.toml").write_text("op_account = \"x\"\n", encoding="utf-8")
+    (config_root / "config.toml").write_text('op_account = "x"\n', encoding="utf-8")
     project_root = tmp_path / "project"
     project_root.mkdir()
     monkeypatch.chdir(project_root)
@@ -243,9 +242,7 @@ def test_run_init_zero_repos(monkeypatch, tmp_path: Path, display: PlainDisplay)
 def test_build_parser_has_install_apply_init() -> None:
     parser = cli._build_parser()
     for cmd in ("install", "apply", "init", "import", "doctor", "uninstall"):
-        result = parser.parse_args(
-            [cmd] if cmd != "import" else [cmd, "--repo", "/tmp", "--name", "x"]
-        )
+        result = parser.parse_args([cmd] if cmd != "import" else [cmd, "--repo", "/tmp", "--name", "x"])
         assert result.command == cmd
 
 
@@ -259,7 +256,7 @@ def _make_registry(tmp_path: Path) -> Path:
     """Create a config_root with one imported repo in the new multi-repo layout."""
     config_root = tmp_path / "root"
     config_root.mkdir(parents=True)
-    (config_root / "config.toml").write_text("op_account = \"x\"\n", encoding="utf-8")
+    (config_root / "config.toml").write_text('op_account = "x"\n', encoding="utf-8")
 
     repo_dir = config_root / "repos" / "my-config"
 
@@ -297,10 +294,9 @@ def _make_registry(tmp_path: Path) -> Path:
     )
 
     import yaml as _yaml
+
     (config_root / "repos.yaml").write_text(
-        _yaml.safe_dump(
-            {"repos": [{"name": "my-config", "source": "https://example.com/my-config.git"}]}
-        )
+        _yaml.safe_dump({"repos": [{"name": "my-config", "source": "https://example.com/my-config.git"}]})
     )
 
     return config_root
@@ -308,6 +304,7 @@ def _make_registry(tmp_path: Path) -> Path:
 
 def test_discover_artifact_tags(tmp_path: Path) -> None:
     from ai_sync.repo_store import get_all_repo_roots
+
     config_root = _make_registry(tmp_path)
     repo_roots = get_all_repo_roots(config_root)
     tags = cli._discover_artifact_tags(repo_roots)
@@ -341,6 +338,7 @@ def test_run_init_with_tag(monkeypatch, tmp_path: Path, display: PlainDisplay) -
     assert cli._run_init(args, config_root, display) == 0
 
     import yaml as _yaml
+
     manifest = _yaml.safe_load((project_root / ".ai-sync.yaml").read_text(encoding="utf-8"))
     assert "agent_a" in manifest["agents"]
     assert "agent_b" not in manifest["agents"]

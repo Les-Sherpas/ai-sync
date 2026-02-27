@@ -77,9 +77,7 @@ def check_requirements(requirements: list[Requirement]) -> list[RequirementCheck
         actual_tuple = (int(match.group(1)), int(match.group(2)), int(match.group(3)))
 
         if _satisfies(actual_tuple, constraint):
-            results.append(
-                RequirementCheckResult(name=name, ok=True, actual=actual, required=constraint)
-            )
+            results.append(RequirementCheckResult(name=name, ok=True, actual=actual, required=constraint))
         else:
             results.append(
                 RequirementCheckResult(

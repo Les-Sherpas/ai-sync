@@ -48,9 +48,7 @@ def _load_yaml_file(path: Path) -> dict[str, Any]:
 def resolve_project_manifest(project_root: Path) -> ProjectManifest:
     ai_sync_yaml = project_root / ".ai-sync.yaml"
     if not ai_sync_yaml.exists():
-        raise RuntimeError(
-            f"No .ai-sync.yaml found in {project_root}. Run `ai-sync init` first."
-        )
+        raise RuntimeError(f"No .ai-sync.yaml found in {project_root}. Run `ai-sync init` first.")
 
     base_data = _load_yaml_file(ai_sync_yaml)
     base = ProjectManifest.model_validate(base_data)
@@ -66,11 +64,7 @@ def resolve_project_manifest(project_root: Path) -> ProjectManifest:
     merged_skills = local.skills if "skills" in local_data else base.skills
     merged_commands = local.commands if "commands" in local_data else base.commands
     merged_mcp = local.mcp_servers if "mcp-servers" in local_data else base.mcp_servers
-    merged_settings = (
-        _deep_merge_settings(base.settings, local.settings)
-        if "settings" in local_data
-        else base.settings
-    )
+    merged_settings = _deep_merge_settings(base.settings, local.settings) if "settings" in local_data else base.settings
 
     return ProjectManifest(
         agents=merged_agents,
@@ -101,9 +95,7 @@ def load_defaults(repo_roots: list[Path]) -> dict[str, Any]:
     return {}
 
 
-def validate_against_registry(
-    manifest: ProjectManifest, repo_roots: list[Path]
-) -> list[str]:
+def validate_against_registry(manifest: ProjectManifest, repo_roots: list[Path]) -> list[str]:
     available_agents: set[str] = set()
     available_skills: set[str] = set()
     available_commands: set[str] = set()
@@ -116,9 +108,7 @@ def validate_against_registry(
 
         skills_dir = repo_root / "skills"
         if skills_dir.exists():
-            available_skills.update(
-                d.name for d in skills_dir.iterdir() if d.is_dir() and (d / "SKILL.md").exists()
-            )
+            available_skills.update(d.name for d in skills_dir.iterdir() if d.is_dir() and (d / "SKILL.md").exists())
 
         commands_dir = repo_root / "commands"
         if commands_dir.exists():

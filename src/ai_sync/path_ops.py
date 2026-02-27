@@ -100,10 +100,7 @@ def set_at_path(data: object, path: str, value: object) -> object:
         if part not in cur or not isinstance(cur[part], (dict, list)):
             next_part = parts[idx + 1]
             if next_part.isdigit():
-                raise ValueError(
-                    f"Ambiguous path {path!r}: "
-                    f"list container is not explicitly defined at {part!r}"
-                )
+                raise ValueError(f"Ambiguous path {path!r}: list container is not explicitly defined at {part!r}")
             cur[part] = {}
         cur = cur[part]
     last = parts[-1]
@@ -151,10 +148,7 @@ def delete_at_path(data: object, path: str) -> object:
         if part not in cur or not isinstance(cur[part], (dict, list)):
             next_part = parts[idx + 1]
             if next_part.isdigit():
-                raise ValueError(
-                    f"Ambiguous path {path!r}: "
-                    f"list container is not explicitly defined at {part!r}"
-                )
+                raise ValueError(f"Ambiguous path {path!r}: list container is not explicitly defined at {part!r}")
             cur[part] = {}
         cur = cur[part]
     last = parts[-1]

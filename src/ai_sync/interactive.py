@@ -28,10 +28,7 @@ def run_init_prompts(
         display.panel("Space to toggle, Enter to confirm", title="Select agents", style="info")
         selected_agents = questionary.checkbox(
             "Agents",
-            choices=[
-                questionary.Choice(title=a, value=a, checked=(a in default_agents))
-                for a in available_agents
-            ],
+            choices=[questionary.Choice(title=a, value=a, checked=(a in default_agents)) for a in available_agents],
         ).ask()
         if selected_agents is None:
             return None
@@ -44,10 +41,7 @@ def run_init_prompts(
         display.panel("Space to toggle, Enter to confirm", title="Select skills", style="info")
         selected_skills = questionary.checkbox(
             "Skills",
-            choices=[
-                questionary.Choice(title=s, value=s, checked=(s in default_skills))
-                for s in available_skills
-            ],
+            choices=[questionary.Choice(title=s, value=s, checked=(s in default_skills)) for s in available_skills],
         ).ask()
         if selected_skills is None:
             return None
@@ -60,10 +54,7 @@ def run_init_prompts(
         display.panel("Space to toggle, Enter to confirm", title="Select commands", style="info")
         selected_commands = questionary.checkbox(
             "Commands",
-            choices=[
-                questionary.Choice(title=c, value=c, checked=(c in default_commands))
-                for c in available_commands
-            ],
+            choices=[questionary.Choice(title=c, value=c, checked=(c in default_commands)) for c in available_commands],
         ).ask()
         if selected_commands is None:
             return None
@@ -76,10 +67,7 @@ def run_init_prompts(
         display.panel("Space to toggle, Enter to confirm", title="Select MCP servers", style="info")
         selected_mcp = questionary.checkbox(
             "MCP Servers",
-            choices=[
-                questionary.Choice(title=m, value=m, checked=(m in default_mcp))
-                for m in available_mcp_servers
-            ],
+            choices=[questionary.Choice(title=m, value=m, checked=(m in default_mcp)) for m in available_mcp_servers],
         ).ask()
         if selected_mcp is None:
             return None

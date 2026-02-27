@@ -27,10 +27,7 @@ class PlainDisplay(Display):
     def table(self, headers: tuple[str, ...], rows: list[tuple[str, ...]]) -> None:
         if not headers and not rows:
             return
-        col_widths = [
-            max(len(str(h)), max((len(str(r[i])) for r in rows), default=0))
-            for i, h in enumerate(headers)
-        ]
+        col_widths = [max(len(str(h)), max((len(str(r[i])) for r in rows), default=0)) for i, h in enumerate(headers)]
         fmt = "  ".join(f"{{:<{w}}}" for w in col_widths)
         print(fmt.format(*headers))
         print("-" * (sum(col_widths) + 2 * (len(headers) - 1)))

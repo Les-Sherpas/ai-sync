@@ -89,8 +89,7 @@ is_background: {"true" if meta.get("is_background", False) else "false"}
         oauth_cfg = server.get("oauth", {})
         if oauth_cfg.get("enabled") or oauth_cfg.get("authorizationUrl"):
             oauth_src = (
-                secret_srv.get("oauth") or secret_srv.get("auth")
-                or server.get("oauth") or server.get("auth") or {}
+                secret_srv.get("oauth") or secret_srv.get("auth") or server.get("oauth") or server.get("auth") or {}
             )
             oauth_entry: dict = {}
             if oauth_cfg.get("enabled"):
@@ -108,9 +107,7 @@ is_background: {"true" if meta.get("is_background", False) else "false"}
                     raise ValueError
                 entry["timeout"] = int(sec * 1000)
             except (TypeError, ValueError):
-                print(
-                    f"  Warning: Invalid timeout_seconds for server '{server_id}': {server['timeout_seconds']!r}"
-                )
+                print(f"  Warning: Invalid timeout_seconds for server '{server_id}': {server['timeout_seconds']!r}")
         return entry
 
     def sync_mcp(self, servers: dict, secrets: dict, store: StateStore) -> None:
@@ -147,10 +144,12 @@ is_background: {"true" if meta.get("is_background", False) else "false"}
     def _build_client_config(self, settings: dict) -> dict:
         mode = settings.get("mode") or "normal"
         if mode in {"normal", "yolo"}:
-            return {"permissions": {
-                "allow": ["Shell(*)", "Read(*)", "Write(*)", "WebFetch(*)", "Mcp(*:*)"],
-                "deny": [],
-            }}
+            return {
+                "permissions": {
+                    "allow": ["Shell(*)", "Read(*)", "Write(*)", "WebFetch(*)", "Mcp(*:*)"],
+                    "deny": [],
+                }
+            }
         return {"permissions": {"allow": [], "deny": []}}
 
     def sync_client_config(self, settings: dict, store: StateStore) -> None:

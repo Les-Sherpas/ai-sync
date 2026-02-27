@@ -4,8 +4,6 @@ import asyncio
 from dataclasses import dataclass
 from pathlib import Path
 
-import pytest
-
 from ai_sync import op_inject
 
 

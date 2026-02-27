@@ -20,8 +20,7 @@ class Client(ABC):
 
     @property
     @abstractmethod
-    def name(self) -> str:
-        ...
+    def name(self) -> str: ...
 
     @property
     def config_dir(self) -> Path:
@@ -89,20 +88,18 @@ class Client(ABC):
         print(f"  Warning: Secrets written in plaintext to {path}. Consider using a secrets manager.")
 
     @abstractmethod
-    def write_agent(self, slug: str, meta: dict, raw_content: str, prompt_src_path: Path, store: StateStore) -> None:
-        ...
+    def write_agent(
+        self, slug: str, meta: dict, raw_content: str, prompt_src_path: Path, store: StateStore
+    ) -> None: ...
 
     @abstractmethod
-    def write_command(self, slug: str, raw_content: str, command_src_path: Path, store: StateStore) -> None:
-        ...
+    def write_command(self, slug: str, raw_content: str, command_src_path: Path, store: StateStore) -> None: ...
 
     @abstractmethod
-    def sync_mcp(self, servers: dict, secrets: dict, store: StateStore) -> None:
-        ...
+    def sync_mcp(self, servers: dict, secrets: dict, store: StateStore) -> None: ...
 
     @abstractmethod
-    def sync_client_config(self, settings: dict, store: StateStore) -> None:
-        ...
+    def sync_client_config(self, settings: dict, store: StateStore) -> None: ...
 
     def sync_instructions(self, instructions_content: str, store: StateStore) -> None:
         pass

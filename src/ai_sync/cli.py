@@ -15,18 +15,6 @@ from typing import Iterator, cast
 import yaml
 
 from .config_store import DEFAULT_SECRET_PROVIDER, ensure_layout, get_config_root, load_config, write_config
-from .repo_store import (
-    SLUG_ERROR_MSG,
-    SLUG_RE,
-    RepoEntry,
-    _dest_for_name,
-    copy_repo_to_store,
-    get_all_repo_roots,
-    get_repo_root,
-    load_repos,
-    save_repos,
-    validate_slug,
-)
 from .display import PlainDisplay, RichDisplay
 from .display.base import Display
 from .env_loader import collect_env_refs, resolve_env_refs_in_obj
@@ -40,6 +28,17 @@ from .project import (
     load_defaults,
     resolve_project_manifest,
     validate_against_registry,
+)
+from .repo_store import (
+    SLUG_ERROR_MSG,
+    RepoEntry,
+    _dest_for_name,
+    copy_repo_to_store,
+    get_all_repo_roots,
+    get_repo_root,
+    load_repos,
+    save_repos,
+    validate_slug,
 )
 from .requirements_checker import check_requirements
 from .requirements_loader import load_and_filter_requirements
@@ -65,9 +64,7 @@ def _clone_remote_repo(repo: str) -> Iterator[Path]:
 
 
 def _build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        description="Sync AI configs (agents, skills, commands, MCP servers) per-project."
-    )
+    parser = argparse.ArgumentParser(description="Sync AI configs (agents, skills, commands, MCP servers) per-project.")
     subparsers = parser.add_subparsers(dest="command")
 
     install_parser = subparsers.add_parser("install", help="Initialize ~/.ai-sync and store 1Password settings.")
@@ -434,9 +431,7 @@ def _run_apply(args: argparse.Namespace, config_root: Path, display: Display) ->
 
     mcp_manifest = load_and_filter_mcp(repo_roots, manifest.mcp_servers, display)
 
-    req_results = check_requirements(
-        load_and_filter_requirements(repo_roots, manifest.mcp_servers, display)
-    )
+    req_results = check_requirements(load_and_filter_requirements(repo_roots, manifest.mcp_servers, display))
     for r in req_results:
         if not r.ok and r.error:
             display.print(f"Warning: {r.error}", style="warning")
@@ -538,9 +533,7 @@ def _run_doctor(config_root: Path, display: Display) -> int:
         else:
             display.print("  Gitignore: OK", style="success")
 
-        req_results = check_requirements(
-            load_and_filter_requirements(repo_roots, manifest.mcp_servers, display)
-        )
+        req_results = check_requirements(load_and_filter_requirements(repo_roots, manifest.mcp_servers, display))
         for r in req_results:
             if r.ok:
                 display.print(f"  \u2713 {r.name} ({r.actual})", style="success")

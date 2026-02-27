@@ -152,5 +152,6 @@ def test_validate_against_registry_multi_repo(tmp_path: Path) -> None:
 
 def test_no_ai_sync_yaml_raises(tmp_path: Path) -> None:
     import pytest
+
     with pytest.raises(RuntimeError, match="No .ai-sync.yaml"):
         resolve_project_manifest(tmp_path)

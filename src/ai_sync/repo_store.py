@@ -12,9 +12,7 @@ import yaml
 REPOS_FILE = "repos.yaml"
 
 SLUG_RE = re.compile(r"^[a-z0-9]([a-z0-9-]*[a-z0-9])?$")
-SLUG_ERROR_MSG = (
-    "Name must match [a-z0-9]([a-z0-9-]*[a-z0-9])? (lowercase, no leading/trailing hyphens)"
-)
+SLUG_ERROR_MSG = "Name must match [a-z0-9]([a-z0-9-]*[a-z0-9])? (lowercase, no leading/trailing hyphens)"
 
 
 class RepoEntry(TypedDict):
@@ -49,11 +47,7 @@ def load_repos(config_root: Path) -> list[RepoEntry]:
     raw = data.get("repos") or []
     result: list[RepoEntry] = []
     for item in raw:
-        if (
-            isinstance(item, dict)
-            and isinstance(item.get("name"), str)
-            and isinstance(item.get("source"), str)
-        ):
+        if isinstance(item, dict) and isinstance(item.get("name"), str) and isinstance(item.get("source"), str):
             result.append(RepoEntry(name=item["name"], source=item["source"]))
     return result
 

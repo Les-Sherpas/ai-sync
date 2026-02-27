@@ -61,6 +61,6 @@ def test_collect_env_refs_ignores_escaped() -> None:
 
 
 def test_resolve_env_refs_nested_with_escape() -> None:
-    data = {"args": ['cmd --id=$$MY_VAR'], "env": {"MY_VAR": "${MY_VAR}"}}
+    data = {"args": ["cmd --id=$$MY_VAR"], "env": {"MY_VAR": "${MY_VAR}"}}
     resolved = resolve_env_refs_in_obj(data, {"MY_VAR": "secret"})
     assert resolved == {"args": ["cmd --id=$MY_VAR"], "env": {"MY_VAR": "secret"}}

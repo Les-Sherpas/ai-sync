@@ -94,8 +94,7 @@ class CodexClient(Client):
         oauth_cfg = server.get("oauth", {})
         if oauth_cfg.get("enabled") or oauth_cfg.get("authorizationUrl"):
             oauth_src = (
-                secret_srv.get("oauth") or secret_srv.get("auth")
-                or server.get("oauth") or server.get("auth") or {}
+                secret_srv.get("oauth") or secret_srv.get("auth") or server.get("oauth") or server.get("auth") or {}
             )
             oauth_entry: dict = {}
             if oauth_cfg.get("enabled"):
@@ -115,9 +114,7 @@ class CodexClient(Client):
                 table["startup_timeout_sec"] = sec_value
                 table["tool_timeout_sec"] = sec_value
             except (TypeError, ValueError):
-                print(
-                    f"  Warning: Invalid timeout_seconds for server '{server_id}': {server['timeout_seconds']!r}"
-                )
+                print(f"  Warning: Invalid timeout_seconds for server '{server_id}': {server['timeout_seconds']!r}")
         return table
 
     def sync_mcp(self, servers: dict, secrets: dict, store: StateStore) -> None:

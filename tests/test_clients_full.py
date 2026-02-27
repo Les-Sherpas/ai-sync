@@ -3,14 +3,12 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
 import tomli as tomllib
 
 from ai_sync.clients.codex import CodexClient
 from ai_sync.clients.cursor import CursorClient
 from ai_sync.clients.gemini import GeminiClient
 from ai_sync.state_store import StateStore
-
 
 # ---------------------------------------------------------------------------
 # sync_mcp + sync_client_config (integration)
@@ -36,8 +34,7 @@ def test_codex_sync_mcp_and_config(monkeypatch, tmp_path: Path) -> None:
     data = tomllib.loads(config_path.read_text(encoding="utf-8"))
     assert "mcp_servers" in data
     mcp_env = tmp_path / ".codex" / "mcp.env"
-    assert mcp_env.exists()
-    assert "export TOKEN=" in mcp_env.read_text(encoding="utf-8")
+    assert not mcp_env.exists()
 
     client.sync_client_config({"mode": "yolo", "subagents": True}, store)
     data = tomllib.loads(config_path.read_text(encoding="utf-8"))

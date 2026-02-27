@@ -40,17 +40,13 @@ class DummyClient(Client):
     def config_dir(self) -> Path:
         return self._base / f".{self._name}"
 
-    def write_agent(
-        self, slug: str, meta: dict, raw_content: str, prompt_src_path: Path, store: StateStore
-    ) -> None:
+    def write_agent(self, slug: str, meta: dict, raw_content: str, prompt_src_path: Path, store: StateStore) -> None:
         self.calls.append(f"write_agent:{self._name}:{slug}")
         target = self.get_agents_dir() / slug / "prompt.md"
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(raw_content, encoding="utf-8")
 
-    def write_command(
-        self, slug: str, raw_content: str, command_src_path: Path, store: StateStore
-    ) -> None:
+    def write_command(self, slug: str, raw_content: str, command_src_path: Path, store: StateStore) -> None:
         self.calls.append(f"write_command:{self._name}:{slug}")
         target = self.config_dir / "commands" / command_src_path
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -74,7 +70,7 @@ def _make_repo_root(tmp_path: Path) -> Path:
     (root / "skills" / "skill-one" / "SKILL.md").write_text("# Skill\n", encoding="utf-8")
     (root / "commands" / "shortcut.md").write_text("Do a thing\n", encoding="utf-8")
     (root / "mcp-servers.yaml").write_text(
-        "servers:\n  srv:\n    method: stdio\n    command: npx\n    env:\n      TOKEN: \"$TOKEN\"\n",
+        'servers:\n  srv:\n    method: stdio\n    command: npx\n    env:\n      TOKEN: "$TOKEN"\n',
         encoding="utf-8",
     )
     return root

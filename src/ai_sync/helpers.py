@@ -69,13 +69,9 @@ def validate_servers_yaml(data: dict) -> list[str]:
             errors.append(f"Server '{sid}' must be a mapping")
             continue
         if "method" in srv and srv["method"] not in ("stdio", "http", "sse"):
-            errors.append(
-                f"Server '{sid}': invalid method '{srv['method']}' (expected stdio/http/sse)"
-            )
+            errors.append(f"Server '{sid}': invalid method '{srv['method']}' (expected stdio/http/sse)")
         if "timeout" in srv:
-            errors.append(
-                f"Server '{sid}': 'timeout' is no longer supported; use 'timeout_seconds'"
-            )
+            errors.append(f"Server '{sid}': 'timeout' is no longer supported; use 'timeout_seconds'")
         if srv.get("method", "stdio") == "stdio" and not srv.get("command"):
             errors.append(f"Server '{sid}': stdio server must have a 'command'")
         if "timeout_seconds" in srv:

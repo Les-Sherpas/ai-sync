@@ -71,9 +71,7 @@ def _resolve_auth(config_root: Path | None) -> str | DesktopAuth:
         return token
     if account:
         return DesktopAuth(account_name=account)
-    raise RuntimeError(
-        "1Password auth required. Run `ai-sync setup` or set OP_SERVICE_ACCOUNT_TOKEN/OP_ACCOUNT."
-    )
+    raise RuntimeError("1Password auth required. Run `ai-sync setup` or set OP_SERVICE_ACCOUNT_TOKEN/OP_ACCOUNT.")
 
 
 async def _load_runtime_env_async(env_template_path: Path, config_root: Path | None) -> dict[str, str]:

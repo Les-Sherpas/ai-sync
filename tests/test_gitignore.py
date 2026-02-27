@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from ai_sync.gitignore import check_gitignore, write_gitignore_entries, SENSITIVE_PATHS
+from ai_sync.gitignore import SENSITIVE_PATHS, check_gitignore, write_gitignore_entries
 
 
 def test_no_gitignore_returns_all(tmp_path: Path) -> None:

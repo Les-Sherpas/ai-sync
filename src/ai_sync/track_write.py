@@ -310,7 +310,6 @@ def _serialize_value(value: object) -> str:
         return yaml.safe_dump(value, sort_keys=False)
 
 
-
 def _write_atomic(path: Path, content: str) -> None:
     tmp = path.with_suffix(f"{path.suffix}.{os.getpid()}.tmp")
     try:
