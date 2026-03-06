@@ -36,6 +36,7 @@ def test_run_init_prompts_ok(monkeypatch) -> None:
         DummyPrompt(["a"]),
         DummyPrompt(["s"]),
         DummyPrompt(["cmd"]),
+        DummyPrompt(["r1"]),
         DummyPrompt(["mcp1"]),
         DummyPrompt("normal"),
         DummyPrompt(True),
@@ -55,6 +56,7 @@ def test_run_init_prompts_ok(monkeypatch) -> None:
         available_agents=["a"],
         available_skills=["s"],
         available_commands=["cmd"],
+        available_rules=["r1"],
         available_mcp_servers=["mcp1"],
         defaults={},
     )
@@ -62,6 +64,7 @@ def test_run_init_prompts_ok(monkeypatch) -> None:
     assert "a" in result["agents"]
     assert "s" in result["skills"]
     assert "cmd" in result["commands"]
+    assert "r1" in result["rules"]
     assert "mcp1" in result["mcp-servers"]
     assert result["settings"]["mode"] == "normal"
 
@@ -75,6 +78,7 @@ def test_run_init_prompts_cancel(monkeypatch) -> None:
             available_agents=["a"],
             available_skills=["s"],
             available_commands=[],
+            available_rules=[],
             available_mcp_servers=[],
             defaults={},
         )

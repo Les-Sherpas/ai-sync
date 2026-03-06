@@ -12,6 +12,7 @@ def run_init_prompts(
     available_agents: list[str],
     available_skills: list[str],
     available_commands: list[str],
+    available_rules: list[str],
     available_mcp_servers: list[str],
     defaults: dict[str, Any],
 ) -> dict[str, Any] | None:
@@ -20,6 +21,7 @@ def run_init_prompts(
     default_agents = set(defaults.get("agents") or [])
     default_skills = set(defaults.get("skills") or [])
     default_commands = set(defaults.get("commands") or [])
+    default_rules = set(defaults.get("rules") or [])
     default_mcp = set(defaults.get("mcp-servers") or [])
     default_settings = defaults.get("settings") or {}
 
@@ -61,6 +63,19 @@ def run_init_prompts(
     else:
         display.print("Commands: none available", style="dim")
         selected_commands = []
+
+    display.print("")
+    if available_rules:
+        display.panel("Space to toggle, Enter to confirm", title="Select rules (merged into AGENTS.md)", style="info")
+        selected_rules = questionary.checkbox(
+            "Rules",
+            choices=[questionary.Choice(title=r, value=r, checked=(r in default_rules)) for r in available_rules],
+        ).ask()
+        if selected_rules is None:
+            return None
+    else:
+        display.print("Rules: none available", style="dim")
+        selected_rules = []
 
     display.print("")
     if available_mcp_servers:
@@ -111,6 +126,7 @@ def run_init_prompts(
         "agents": selected_agents or [],
         "skills": selected_skills or [],
         "commands": selected_commands or [],
+        "rules": selected_rules or [],
         "mcp-servers": selected_mcp or [],
         "settings": {
             "mode": mode,

@@ -14,6 +14,7 @@ class ProjectManifest(BaseModel):
     agents: list[str] = Field(default_factory=list)
     skills: list[str] = Field(default_factory=list)
     commands: list[str] = Field(default_factory=list)
+    rules: list[str] = Field(default_factory=list)
     mcp_servers: list[str] = Field(
         default_factory=list, validation_alias="mcp-servers", serialization_alias="mcp-servers"
     )
@@ -63,6 +64,7 @@ def resolve_project_manifest(project_root: Path) -> ProjectManifest:
     merged_agents = local.agents if "agents" in local_data else base.agents
     merged_skills = local.skills if "skills" in local_data else base.skills
     merged_commands = local.commands if "commands" in local_data else base.commands
+    merged_rules = local.rules if "rules" in local_data else base.rules
     merged_mcp = local.mcp_servers if "mcp-servers" in local_data else base.mcp_servers
     merged_settings = _deep_merge_settings(base.settings, local.settings) if "settings" in local_data else base.settings
 
@@ -70,6 +72,7 @@ def resolve_project_manifest(project_root: Path) -> ProjectManifest:
         agents=merged_agents,
         skills=merged_skills,
         commands=merged_commands,
+        rules=merged_rules,
         mcp_servers=merged_mcp,
         settings=merged_settings,
     )
@@ -99,6 +102,7 @@ def validate_against_registry(manifest: ProjectManifest, repo_roots: list[Path])
     available_agents: set[str] = set()
     available_skills: set[str] = set()
     available_commands: set[str] = set()
+    available_rules: set[str] = set()
     available_servers: set[str] = set()
 
     for repo_root in repo_roots:
@@ -115,6 +119,10 @@ def validate_against_registry(manifest: ProjectManifest, repo_roots: list[Path])
             for cmd_path in commands_dir.rglob("*"):
                 if cmd_path.is_file():
                     available_commands.add(cmd_path.relative_to(commands_dir).as_posix())
+
+        rules_dir = repo_root / "rules"
+        if rules_dir.exists():
+            available_rules.update(p.stem for p in rules_dir.glob("*.md"))
 
         mcp_path = repo_root / "mcp-servers.yaml"
         if mcp_path.exists():
@@ -134,6 +142,9 @@ def validate_against_registry(manifest: ProjectManifest, repo_roots: list[Path])
     for command in manifest.commands:
         if command not in available_commands:
             warnings.append(f"Unknown command: {command!r}")
+    for rule in manifest.rules:
+        if rule not in available_rules:
+            warnings.append(f"Unknown rule: {rule!r}")
     for server in manifest.mcp_servers:
         if server not in available_servers:
             warnings.append(f"Unknown MCP server: {server!r}")

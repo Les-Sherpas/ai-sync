@@ -66,7 +66,7 @@ async def _fake_authenticate(*_args, **_kwargs) -> DummyClient:
 
 
 def test_load_runtime_env_async_resolves(monkeypatch, tmp_path: Path) -> None:
-    env_file = tmp_path / ".env.tpl"
+    env_file = tmp_path / ".env.ai-sync.tpl"
     env_file.write_text("TOKEN=op://vault/item/field\n", encoding="utf-8")
     monkeypatch.setattr(op_inject.Client, "authenticate", _fake_authenticate)
     monkeypatch.setenv("OP_SERVICE_ACCOUNT_TOKEN", "token")

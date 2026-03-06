@@ -41,7 +41,7 @@ def test_run_import_local_path_links_in_place(monkeypatch, tmp_path: Path, displ
     (repo / "skills" / "skill-one" / "SKILL.md").write_text("# Skill\n", encoding="utf-8")
     (repo / "mcp-servers.yaml").write_text("servers:\n  ok:\n    method: stdio\n    command: npx\n", encoding="utf-8")
     (repo / "defaults.yaml").write_text("agents: []\n", encoding="utf-8")
-    (repo / ".env.tpl").write_text("X=1\n", encoding="utf-8")
+    (repo / ".env.ai-sync.tpl").write_text("X=1\n", encoding="utf-8")
     dest = tmp_path / "dest"
     dest.mkdir()
     monkeypatch.setattr(cli, "ensure_layout", lambda: dest)

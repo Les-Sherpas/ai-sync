@@ -197,6 +197,68 @@ def sync_commands(
         display.print("No commands selected", style="dim")
 
 
+ENV_HINT = (
+    "> **Environment variables** are defined in `.env.ai-sync` at the project root."
+    " Source it before running commands that need credentials: `source .env.ai-sync`\n"
+)
+
+
+def sync_rules(
+    project_root: Path,
+    repo_roots: list[Path],
+    rule_list: list[str],
+    has_env: bool,
+    store: StateStore,
+    display: Display,
+) -> None:
+    """Merge selected rule files into a single AGENTS.md at the project root."""
+    display.rule("Syncing Rules")
+    if not rule_list:
+        display.print("No rules selected", style="dim")
+        return
+
+    sections: list[str] = []
+    rows: list[tuple[str, ...]] = []
+    for rule_name in rule_list:
+        rule_path: Path | None = None
+        for repo_root in repo_roots:
+            candidate = repo_root / "rules" / f"{rule_name}.md"
+            if candidate.exists():
+                rule_path = candidate
+        if rule_path is None:
+            display.print(f"Rule {rule_name!r} not found in any repo", style="warning")
+            continue
+        content = rule_path.read_text(encoding="utf-8")
+        sections.append(content.strip())
+        rows.append((rule_name,))
+
+    if not sections:
+        display.print("No rules resolved", style="dim")
+        return
+
+    parts: list[str] = []
+    if has_env:
+        parts.append(ENV_HINT)
+    parts.extend(sections)
+    agents_md_content = "\n\n".join(parts) + "\n"
+    agents_md_path = project_root / "AGENTS.md"
+
+    track_write_blocks(
+        [
+            WriteSpec(
+                file_path=agents_md_path,
+                format="text",
+                target="ai-sync:rules",
+                value=agents_md_content,
+            )
+        ],
+        store,
+    )
+
+    if rows:
+        display.table(("Rule",), rows)
+
+
 def sync_client_config(
     settings: dict,
     clients: Sequence[Client],
@@ -282,6 +344,33 @@ def _flatten_structured_to_specs(file_path: Path, fmt: str, data: object) -> lis
     return specs
 
 
+def sync_env_file(
+    project_root: Path,
+    runtime_env: dict[str, str],
+    store: StateStore,
+    display: Display,
+) -> None:
+    """Write resolved environment variables to .env.ai-sync at the project root."""
+    if not runtime_env:
+        return
+    display.rule("Syncing Environment File")
+    lines = [f"{key}={value}" for key, value in sorted(runtime_env.items())]
+    content = "\n".join(lines) + "\n"
+    env_path = project_root / ".env.ai-sync"
+    track_write_blocks(
+        [
+            WriteSpec(
+                file_path=env_path,
+                format="text",
+                target="ai-sync:env",
+                value=content,
+            )
+        ],
+        store,
+    )
+    display.print(f"  Wrote {len(runtime_env)} variables to .env.ai-sync", style="info")
+
+
 def run_apply(
     *,
     project_root: Path,
@@ -289,6 +378,7 @@ def run_apply(
     manifest: ProjectManifest,
     mcp_manifest: dict,
     secrets: dict,
+    runtime_env: dict[str, str],
     display: Display,
 ) -> int:
     display.print("")
@@ -303,9 +393,12 @@ def run_apply(
     store = StateStore(project_root)
     store.load()
 
+    has_env = bool(runtime_env)
+    sync_env_file(project_root, runtime_env, store, display)
     sync_agents(repo_roots, manifest.agents, clients, store, display)
     sync_skills(repo_roots, manifest.skills, clients, store, display)
     sync_commands(repo_roots, manifest.commands, clients, store, display)
+    sync_rules(project_root, repo_roots, manifest.rules, has_env, store, display)
     sync_mcp_servers(mcp_manifest, clients, secrets, store, display)
     sync_client_config(manifest.settings, clients, store, display)
     sync_instructions(project_root, clients, store, display)

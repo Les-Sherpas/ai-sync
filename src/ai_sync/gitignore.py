@@ -12,6 +12,7 @@ SENSITIVE_PATHS = [
     ".gemini/*",
     ".ai-sync.local.yaml",
     ".ai-sync/state/",
+    ".env.ai-sync",
 ]
 
 _GITIGNORE_SECTION_HEADER = "# ai-sync managed entries"

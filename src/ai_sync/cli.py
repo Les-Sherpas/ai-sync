@@ -64,7 +64,7 @@ def _clone_remote_repo(repo: str) -> Iterator[Path]:
 
 
 def _build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Sync AI configs (agents, skills, commands, MCP servers) per-project.")
+    parser = argparse.ArgumentParser(description="Sync AI configs (agents, skills, commands, rules, MCP servers) per-project.")
     subparsers = parser.add_subparsers(dest="command")
 
     install_parser = subparsers.add_parser("install", help="Initialize ~/.ai-sync and store 1Password settings.")
@@ -194,10 +194,11 @@ def _run_import(args: argparse.Namespace, display: Display) -> int:
     return 0
 
 
-def _discover_registry(repo_roots: list[Path]) -> tuple[list[str], list[str], list[str], list[str]]:
+def _discover_registry(repo_roots: list[Path]) -> tuple[list[str], list[str], list[str], list[str], list[str]]:
     agents_seen: dict[str, str] = {}
     skills_seen: dict[str, str] = {}
     commands_seen: dict[str, str] = {}
+    rules_seen: dict[str, str] = {}
     mcp_servers_seen: dict[str, str] = {}
 
     for repo_root in repo_roots:
@@ -215,9 +216,14 @@ def _discover_registry(repo_roots: list[Path]) -> tuple[list[str], list[str], li
         commands_dir = repo_root / "commands"
         if commands_dir.exists():
             for cmd_path in commands_dir.rglob("*"):
-                if cmd_path.is_file():
+                if cmd_path.is_file() and cmd_path.suffix == ".md":
                     rel = cmd_path.relative_to(commands_dir).as_posix()
                     commands_seen[rel] = rel
+
+        rules_dir = repo_root / "rules"
+        if rules_dir.exists():
+            for p in rules_dir.glob("*.md"):
+                rules_seen[p.stem] = p.stem
 
         mcp_path = repo_root / "mcp-servers.yaml"
         if mcp_path.exists():
@@ -230,6 +236,7 @@ def _discover_registry(repo_roots: list[Path]) -> tuple[list[str], list[str], li
         sorted(agents_seen),
         sorted(skills_seen),
         sorted(commands_seen),
+        sorted(rules_seen),
         sorted(mcp_servers_seen),
     )
 
@@ -240,6 +247,7 @@ def _discover_artifact_tags(repo_roots: list[Path]) -> dict[str, dict[str, list[
         "agents": {},
         "skills": {},
         "commands": {},
+        "rules": {},
         "mcp-servers": {},
     }
 
@@ -281,6 +289,16 @@ def _discover_artifact_tags(repo_roots: list[Path]) -> dict[str, dict[str, list[
                     if cmd_file.is_file() and cmd_file.stem == stem and not cmd_file.name.endswith(".metadata.yaml"):
                         cmd_key = cmd_file.relative_to(commands_dir).as_posix()
                         result["commands"][cmd_key] = tags
+
+        rules_dir = repo_root / "rules"
+        if rules_dir.exists():
+            for meta_path in rules_dir.glob("*.metadata.yaml"):
+                rule_name = meta_path.name.removesuffix(".metadata.yaml")
+                with open(meta_path, "r", encoding="utf-8") as f:
+                    data = yaml.safe_load(f) or {}
+                tags = data.get("tags") or []
+                if isinstance(tags, list):
+                    result["rules"][rule_name] = tags
 
         mcp_path = repo_root / "mcp-servers.yaml"
         if mcp_path.exists():
@@ -327,7 +345,7 @@ def _run_init(args: argparse.Namespace, config_root: Path, display: Display) -> 
         )
         return 1
 
-    agents, skills, commands, mcp_servers = _discover_registry(repo_roots)
+    agents, skills, commands, rules, mcp_servers = _discover_registry(repo_roots)
     defaults = load_defaults(repo_roots)
 
     tag_arg: str | None = getattr(args, "tag", None)
@@ -337,6 +355,7 @@ def _run_init(args: argparse.Namespace, config_root: Path, display: Display) -> 
         selected_agents = _filter_by_tags(agents, artifact_tags["agents"], tags)
         selected_skills = _filter_by_tags(skills, artifact_tags["skills"], tags)
         selected_commands = _filter_by_tags(commands, artifact_tags["commands"], tags)
+        selected_rules = _filter_by_tags(rules, artifact_tags["rules"], tags)
         selected_mcp = _filter_by_tags(mcp_servers, artifact_tags["mcp-servers"], tags)
         default_settings = defaults.get("settings") or {}
         tools_defaults = default_settings.get("tools") or {}
@@ -344,6 +363,7 @@ def _run_init(args: argparse.Namespace, config_root: Path, display: Display) -> 
             "agents": selected_agents,
             "skills": selected_skills,
             "commands": selected_commands,
+            "rules": selected_rules,
             "mcp-servers": selected_mcp,
             "settings": {
                 "mode": default_settings.get("mode", "normal"),
@@ -354,12 +374,13 @@ def _run_init(args: argparse.Namespace, config_root: Path, display: Display) -> 
         }
         display.print(
             f"Auto-selected {len(selected_agents)} agents, {len(selected_skills)} skills, "
-            f"{len(selected_commands)} commands, {len(selected_mcp)} MCP servers "
+            f"{len(selected_commands)} commands, {len(selected_rules)} rules, "
+            f"{len(selected_mcp)} MCP servers "
             f"matching tags: {', '.join(sorted(tags))}",
             style="success",
         )
     else:
-        result = run_init_prompts(display, agents, skills, commands, mcp_servers, defaults)
+        result = run_init_prompts(display, agents, skills, commands, rules, mcp_servers, defaults)
         if result is None:
             display.print("Cancelled.", style="dim")
             return 1
@@ -411,8 +432,10 @@ def _run_apply(args: argparse.Namespace, config_root: Path, display: Display) ->
     for w in warnings:
         display.print(f"Warning: {w}", style="warning")
 
+    has_env_tpl = any((r / ".env.ai-sync.tpl").exists() for r in repo_roots)
+    needs_gitignore = manifest.mcp_servers or has_env_tpl
     uncovered = check_gitignore(project_root)
-    if uncovered and manifest.mcp_servers:
+    if uncovered and needs_gitignore:
         display.panel(
             "The following sensitive paths are not covered by .gitignore:\n"
             + "\n".join(f"  - {p}" for p in uncovered)
@@ -436,18 +459,19 @@ def _run_apply(args: argparse.Namespace, config_root: Path, display: Display) ->
         if not r.ok and r.error:
             display.print(f"Warning: {r.error}", style="warning")
 
+    runtime_env: dict[str, str] = {}
+    for repo_root in repo_roots:
+        tpl = repo_root / ".env.ai-sync.tpl"
+        if tpl.exists():
+            runtime_env.update(load_runtime_env_from_op(tpl, config_root))
+
     required_vars = collect_env_refs(mcp_manifest)
     secrets: dict = {"servers": {}}
     if required_vars:
-        runtime_env: dict[str, str] = {}
-        for repo_root in repo_roots:
-            tpl = repo_root / ".env.tpl"
-            if tpl.exists():
-                runtime_env.update(load_runtime_env_from_op(tpl, config_root))
         missing = sorted(required_vars - runtime_env.keys())
         if missing:
             display.panel(
-                f"MCP config references env vars not defined in any .env.tpl: {', '.join(missing)}",
+                f"MCP config references env vars not defined in any .env.ai-sync.tpl: {', '.join(missing)}",
                 title="Missing env vars",
                 style="error",
             )
@@ -460,6 +484,7 @@ def _run_apply(args: argparse.Namespace, config_root: Path, display: Display) ->
         manifest=manifest,
         mcp_manifest=mcp_manifest,
         secrets=secrets,
+        runtime_env=runtime_env,
         display=display,
     )
 
@@ -515,7 +540,8 @@ def _run_doctor(config_root: Path, display: Display) -> int:
             manifest = resolve_project_manifest(project_root)
             display.print(
                 f"  .ai-sync.yaml: OK ({len(manifest.agents)} agents, "
-                f"{len(manifest.skills)} skills, {len(manifest.mcp_servers)} MCP servers)",
+                f"{len(manifest.skills)} skills, {len(manifest.rules)} rules, "
+                f"{len(manifest.mcp_servers)} MCP servers)",
                 style="success",
             )
         except RuntimeError as exc:

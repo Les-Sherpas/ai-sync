@@ -77,7 +77,7 @@ Repo:
 Runtime:
 ~/.ai-sync/
 ├── config.toml                # op_account, secret_provider
-├── .env.tpl                   # MCP secrets (op:// refs resolved via 1Password)
+├── .env.ai-sync.tpl           # Environment template (op:// refs resolved via 1Password)
 ├── config/
 │   ├── prompts/
 │   ├── skills/
@@ -88,13 +88,14 @@ Runtime:
 ```
 
 Import repo layout:
+
 ```
 <repo>/
 ├── prompts/
 ├── skills/
 ├── mcp-servers.yaml
 ├── client-settings.yaml
-├── .env.tpl            # optional
+├── .env.ai-sync.tpl            # optional
 └── rules/              # optional
 ```
 
@@ -115,12 +116,12 @@ Other commands: `ai-sync setup`, `ai-sync import`, `ai-sync doctor`.
 
 ### Sync options
 
-| Option | Description |
-|--------|--------------|
-| (none) | Full sync: agents → skills → rules → MCP servers → client config |
-| `--force` | Update the packaged client version lock (dev-only), then sync |
-| `--no-interactive` | Skip interactive prompts |
-| `--plain` | Plain output (implies `--no-interactive`) |
+| Option                           | Description                                                            |
+| -------------------------------- | ---------------------------------------------------------------------- |
+| (none)                           | Full sync: agents → skills → rules → MCP servers → client config       |
+| `--force`                        | Update the packaged client version lock (dev-only), then sync          |
+| `--no-interactive`               | Skip interactive prompts                                               |
+| `--plain`                        | Plain output (implies `--no-interactive`)                              |
 | `--override` / `--override-json` | Override manifest leaf values (e.g. `/servers/context7/enabled=false`) |
 
 ### Sync order
@@ -155,21 +156,21 @@ Each agent lives in `~/.ai-sync/config/prompts/`:
 
 Metadata is **generic** (client-agnostic). The sync script adapts it per client.
 
-| Key | Description | Default |
-|-----|-------------|---------|
-| `slug` | Agent ID (kebab-case) | Derived from filename |
-| `name` | Display name | From filename |
-| `description` | Short description | Extracted from prompt |
+| Key           | Description           | Default               |
+| ------------- | --------------------- | --------------------- |
+| `slug`        | Agent ID (kebab-case) | Derived from filename |
+| `name`        | Display name          | From filename         |
+| `description` | Short description     | Extracted from prompt |
 
 Untracked agents (in client but not in `~/.ai-sync/config/prompts/`) are left alone.
 
 ### Target layout per client
 
-| Client | Target |
-|--------|--------|
-| Codex | `~/.codex/agents/<slug>/prompt.md` + `config.toml` |
-| Cursor | `~/.cursor/agents/<slug>.md` (frontmatter) |
-| Gemini | `~/.gemini/agents/<slug>.md` (frontmatter) |
+| Client | Target                                             |
+| ------ | -------------------------------------------------- |
+| Codex  | `~/.codex/agents/<slug>/prompt.md` + `config.toml` |
+| Cursor | `~/.cursor/agents/<slug>.md` (frontmatter)         |
+| Gemini | `~/.gemini/agents/<slug>.md` (frontmatter)         |
 
 ---
 
@@ -209,42 +210,42 @@ servers:
     command: npx
     args: ["-y", "@modelcontextprotocol/server-xxx"]
     enabled: true
-    clients: [codex, cursor, gemini]   # Optional; default: all
-    timeout_seconds: 60               # Optional; startup/tool timeout (seconds)
-    trust: true                        # Optional; Cursor/Gemini: auto-approve tools
+    clients: [codex, cursor, gemini] # Optional; default: all
+    timeout_seconds: 60 # Optional; startup/tool timeout (seconds)
+    trust: true # Optional; Cursor/Gemini: auto-approve tools
 ```
 
-**STDIO servers** – `command`, `args`; env vars use `"${VAR}"` refs resolved from `~/.ai-sync/.env.tpl`.
+**STDIO servers** – `command`, `args`; env vars use `"${VAR}"` refs resolved from `~/.ai-sync/.env.ai-sync.tpl`.
 
 **HTTP/SSE servers** – `url`, `httpUrl`; optional `bearer_token_env_var` for Codex.
 
-**HTTP with OAuth** – `httpUrl` + `oauth.enabled: true`; `clientId`/`clientSecret` from `~/.ai-sync/.env.tpl` via `"${VAR}"`:
+**HTTP with OAuth** – `httpUrl` + `oauth.enabled: true`; `clientId`/`clientSecret` from `~/.ai-sync/.env.ai-sync.tpl` via `"${VAR}"`:
 
 ```yaml
-  google-maps-grounding-lite:
-    method: http
-    httpUrl: https://mapstools.googleapis.com/mcp
-    oauth:
-      enabled: true
-      clientId: "${GOOGLE_MAPS_GROUNDING_LITE_CLIENT_ID}"
-      clientSecret: "${GOOGLE_MAPS_GROUNDING_LITE_CLIENT_SECRET}"
+google-maps-grounding-lite:
+  method: http
+  httpUrl: https://mapstools.googleapis.com/mcp
+  oauth:
+    enabled: true
+    clientId: "${GOOGLE_MAPS_GROUNDING_LITE_CLIENT_ID}"
+    clientSecret: "${GOOGLE_MAPS_GROUNDING_LITE_CLIENT_SECRET}"
 ```
 
 ### Configured servers
 
-| Server | Method | Description |
-|--------|--------|-------------|
-| context7 | stdio | Documentation lookup (`@upstash/context7-mcp`) |
-| fetch | stdio | URL fetch → markdown (`python -m mcp_server_fetch`) |
-| playwright | stdio | Browser control (`@playwright/mcp`) |
-| exa | http | Search API |
-| google-workspace-perso | stdio | Gmail, Calendar, Drive (personal @gmail.com, separate OAuth) |
-| google-workspace-pro | stdio | Gmail, Calendar, Drive (work @sherpas.com, separate OAuth) |
-| google-maps-grounding-lite | http | Maps grounding (OAuth) |
+| Server                     | Method | Description                                                  |
+| -------------------------- | ------ | ------------------------------------------------------------ |
+| context7                   | stdio  | Documentation lookup (`@upstash/context7-mcp`)               |
+| fetch                      | stdio  | URL fetch → markdown (`python -m mcp_server_fetch`)          |
+| playwright                 | stdio  | Browser control (`@playwright/mcp`)                          |
+| exa                        | http   | Search API                                                   |
+| google-workspace-perso     | stdio  | Gmail, Calendar, Drive (personal @gmail.com, separate OAuth) |
+| google-workspace-pro       | stdio  | Gmail, Calendar, Drive (work @sherpas.com, separate OAuth)   |
+| google-maps-grounding-lite | http   | Maps grounding (OAuth)                                       |
 
-### Secrets (`~/.ai-sync/.env.tpl`)
+### Secrets (`~/.ai-sync/.env.ai-sync.tpl`)
 
-All MCP secrets live in `~/.ai-sync/.env.tpl`. Use `op://` references for 1Password:
+All secrets and environment variables live in `.env.ai-sync.tpl` in your config repo. Use `op://` references for 1Password:
 
 ```
 CONTEXT7_API_KEY=op://Private/AI Tools Secrets/CONTEXT7_API_KEY
@@ -259,12 +260,12 @@ In `mcp-servers.yaml`, reference them with `"${VAR_NAME}"` in each server's `env
 
 ### Client targets
 
-| Client | Target | Strategy |
-|--------|--------|----------|
-| Codex | `~/.codex/config.toml` `[mcp_servers.<id>]` | Merge |
-| Codex | `~/.codex/mcp.env` | Bearer token exports (source before running Codex) |
-| Cursor | `~/.cursor/mcp.json` | Overwrite `mcpServers` |
-| Gemini | `~/.gemini/settings.json` `mcpServers` | Deep-merge |
+| Client | Target                                      | Strategy                                           |
+| ------ | ------------------------------------------- | -------------------------------------------------- |
+| Codex  | `~/.codex/config.toml` `[mcp_servers.<id>]` | Merge                                              |
+| Codex  | `~/.codex/mcp.env`                          | Bearer token exports (source before running Codex) |
+| Cursor | `~/.cursor/mcp.json`                        | Overwrite `mcpServers`                             |
+| Gemini | `~/.gemini/settings.json` `mcpServers`      | Deep-merge                                         |
 
 ### OAuth token portability
 
@@ -278,38 +279,38 @@ Single YAML definition → derived into Codex, Gemini, and Cursor.
 
 ### Schema (`~/.ai-sync/config/client-settings.yaml`)
 
-| Key | Values | Description |
-|-----|--------|-------------|
-| `experimental` | `true` \| `false` | Enable experimental/preview features; suppress experimental warnings where supported |
-| `subagents` | `true` \| `false` | Enable multi-agents, sub-agents, child-prompts, AGENTS.md |
-| `mode` | `strict` \| `normal` \| `yolo` | Approval / restriction mode (default: `normal`) |
-| `tools.sandbox` | `true` \| `false` | Gemini only. When false, allow MCP tools filesystem access (uvx, etc.) |
+| Key             | Values                         | Description                                                                          |
+| --------------- | ------------------------------ | ------------------------------------------------------------------------------------ |
+| `experimental`  | `true` \| `false`              | Enable experimental/preview features; suppress experimental warnings where supported |
+| `subagents`     | `true` \| `false`              | Enable multi-agents, sub-agents, child-prompts, AGENTS.md                            |
+| `mode`          | `strict` \| `normal` \| `yolo` | Approval / restriction mode (default: `normal`)                                      |
+| `tools.sandbox` | `true` \| `false`              | Gemini only. When false, allow MCP tools filesystem access (uvx, etc.)               |
 
 ### Mode semantics
 
-| Mode | Meaning |
-|------|---------|
-| `strict` | Most restrictive: read-only where supported; approval required for actions |
+| Mode     | Meaning                                                                                                    |
+| -------- | ---------------------------------------------------------------------------------------------------------- |
+| `strict` | Most restrictive: read-only where supported; approval required for actions                                 |
 | `normal` | More permissive; allow reads/writes while still requiring approval for destructive actions where supported |
-| `yolo` | No approval prompts, no restrictions (full access) |
+| `yolo`   | No approval prompts, no restrictions (full access)                                                         |
 
 ### Client mapping (from official docs)
 
-| Generic | Codex | Gemini | Cursor |
-|----------|-------|--------|--------|
-| **subagents: true** | `features.multi_agent`, `features.child_agents_md` | `experimental.enableAgents` | — |
-| **experimental: true** | `suppress_unstable_features_warning` | `experimental.plan` | — |
-| **tools.sandbox: false** | — | `tools.sandbox` | — |
-| **mode: strict** | `approval_policy=on-request`, `sandbox_mode=read-only` | `general.defaultApprovalMode=plan`, `tools.sandbox=true` | `permissions: {allow:[], deny:[]}` |
-| **mode: normal** | `approval_policy=untrusted`, `sandbox_mode=danger-full-access` | `general.defaultApprovalMode=auto_edit`, `tools.sandbox=false` | `allow: [Shell(*), Read(*), Write(*), WebFetch(*), Mcp(*:*)]` |
-| **mode: yolo** | `approval_policy=never`, `sandbox_mode=danger-full-access` | `general.defaultApprovalMode=yolo`, `tools.sandbox=false` | `allow: [Shell(*), Read(*), Write(*), WebFetch(*), Mcp(*:*)]` |
+| Generic                  | Codex                                                          | Gemini                                                         | Cursor                                                        |
+| ------------------------ | -------------------------------------------------------------- | -------------------------------------------------------------- | ------------------------------------------------------------- |
+| **subagents: true**      | `features.multi_agent`, `features.child_agents_md`             | `experimental.enableAgents`                                    | —                                                             |
+| **experimental: true**   | `suppress_unstable_features_warning`                           | `experimental.plan`                                            | —                                                             |
+| **tools.sandbox: false** | —                                                              | `tools.sandbox`                                                | —                                                             |
+| **mode: strict**         | `approval_policy=on-request`, `sandbox_mode=read-only`         | `general.defaultApprovalMode=plan`, `tools.sandbox=true`       | `permissions: {allow:[], deny:[]}`                            |
+| **mode: normal**         | `approval_policy=untrusted`, `sandbox_mode=danger-full-access` | `general.defaultApprovalMode=auto_edit`, `tools.sandbox=false` | `allow: [Shell(*), Read(*), Write(*), WebFetch(*), Mcp(*:*)]` |
+| **mode: yolo**           | `approval_policy=never`, `sandbox_mode=danger-full-access`     | `general.defaultApprovalMode=yolo`, `tools.sandbox=false`      | `allow: [Shell(*), Read(*), Write(*), WebFetch(*), Mcp(*:*)]` |
 
 ### Client targets
 
-| Client | Target | Strategy |
-|--------|--------|----------|
-| Codex | `~/.codex/config.toml` | Deep-merge with existing; ai-tools keys overwrite. No backup. |
-| Gemini | `~/.gemini/settings.json` | Deep-merge with existing; ai-tools keys overwrite. No backup. |
+| Client | Target                      | Strategy                                                      |
+| ------ | --------------------------- | ------------------------------------------------------------- |
+| Codex  | `~/.codex/config.toml`      | Deep-merge with existing; ai-tools keys overwrite. No backup. |
+| Gemini | `~/.gemini/settings.json`   | Deep-merge with existing; ai-tools keys overwrite. No backup. |
 | Cursor | `~/.cursor/cli-config.json` | Deep-merge with existing; ai-tools keys overwrite. No backup. |
 
 ---
@@ -362,7 +363,7 @@ If you maintain a separate config repo for `ai-sync import`, consider ignoring:
 
 - `config/mcp-servers.yaml`
 - `config/client-settings.yaml`
-- `.env.tpl`
+- `.env.ai-sync.tpl`
 - `knowledge-base/*`
 - `.env`, Python bytecode, virtual envs, `.pytest_cache/`, `node_modules/`, `.DS_Store`, etc.
 
@@ -376,14 +377,14 @@ If you maintain a separate config repo for `ai-sync import`, consider ignoring:
 2. `poetry sync --with dev`
 3. `ai-sync setup --op-account NAME` (or set `OP_SERVICE_ACCOUNT_TOKEN`)
 4. `ai-sync import --repo /path/to/config-repo` (optional)
-5. Ensure `~/.ai-sync/.env.tpl` has correct 1Password refs
+5. Ensure `~/.ai-sync/.env.ai-sync.tpl` has correct 1Password refs
 6. `ai-sync sync`
 7. For Codex HTTP MCP servers: `source ~/.codex/mcp.env` in shell profile
 
 ### Adding an MCP server
 
 1. Edit `~/.ai-sync/config/mcp-servers.yaml`
-2. Add required vars to `~/.ai-sync/.env.tpl` (use `op://` refs for secrets)
+2. Add required vars to `~/.ai-sync/.env.ai-sync.tpl` (use `op://` refs for secrets)
 3. Run `ai-sync sync`
 
 ### Adding an agent

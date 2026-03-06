@@ -65,7 +65,7 @@ def _make_repo_root(tmp_path: Path) -> Path:
     (root / "prompts").mkdir(parents=True)
     (root / "skills" / "skill-one").mkdir(parents=True)
     (root / "commands").mkdir(parents=True)
-    (root / ".env.tpl").write_text("TOKEN=abc\n", encoding="utf-8")
+    (root / ".env.ai-sync.tpl").write_text("TOKEN=abc\n", encoding="utf-8")
     (root / "prompts" / "agent.md").write_text("## Task\nDo thing\n", encoding="utf-8")
     (root / "skills" / "skill-one" / "SKILL.md").write_text("# Skill\n", encoding="utf-8")
     (root / "commands" / "shortcut.md").write_text("Do a thing\n", encoding="utf-8")
@@ -96,6 +96,7 @@ def test_run_apply_syncs_agents_and_mcp(monkeypatch, tmp_path: Path) -> None:
         manifest=manifest,
         mcp_manifest=mcp_manifest,
         secrets=secrets,
+        runtime_env={},
         display=display,
     )
     assert result == 0
