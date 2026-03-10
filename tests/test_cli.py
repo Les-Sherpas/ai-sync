@@ -77,17 +77,6 @@ def test_run_install_requires_op_account(monkeypatch, tmp_path: Path, display: P
     assert cli._run_install(args, display) == 1
 
 
-def test_run_import_local_path_links_in_place(monkeypatch, tmp_path: Path, display: PlainDisplay) -> None:
-    repo = tmp_path / "repo"
-    repo.mkdir()
-    dest = tmp_path / "dest"
-    dest.mkdir()
-    monkeypatch.setattr(cli, "ensure_layout", lambda: dest)
-    args = argparse.Namespace(repo=str(repo), name="my-repo", force=False)
-    assert cli._run_import(args, display) == 0
-    assert not (dest / "repos" / "my-repo").exists()
-
-
 def test_build_parser_has_plan_and_apply() -> None:
     parser = cli._build_parser()
     assert parser.parse_args(["plan"]).command == "plan"
@@ -133,7 +122,3 @@ def test_run_apply_without_plan_builds_fresh_plan(monkeypatch, tmp_path: Path, d
     args = argparse.Namespace(plain=True, planfile=None)
     assert cli._run_apply(args, config_root, display) == 0
     assert "manifest" in captured
-
-
-def test_run_init_is_deprecated(tmp_path: Path, display: PlainDisplay) -> None:
-    assert cli._run_init(argparse.Namespace(tag=None), tmp_path, display) == 1

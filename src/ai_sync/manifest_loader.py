@@ -52,7 +52,7 @@ def load_and_filter_mcp(
         if server_id in selected:
             raise RuntimeError(
                 f"MCP server collision for output id {server_id!r}. "
-                "Select only one source for this server id in V1."
+                "Select only one source for this server id."
             )
         selected[server_id] = servers[server_id]
     return selected

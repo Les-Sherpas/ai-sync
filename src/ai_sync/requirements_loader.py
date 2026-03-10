@@ -55,6 +55,6 @@ def load_and_filter_requirements(
             if existing.model_dump() != req.model_dump():
                 raise RuntimeError(
                     f"Requirement collision for {req.name!r} across selected sources. "
-                    "V1 does not merge conflicting requirement definitions."
+                    "ai-sync does not merge conflicting requirement definitions."
                 )
     return list(merged.values())

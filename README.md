@@ -85,7 +85,6 @@ Notes:
 - Remote sources must be pinned with `version`.
 - Local path sources are allowed, but they are less portable than pinned remote sources.
 - Every selected resource must be scoped as `<sourceAlias>/<resourceId>`.
-- `.ai-sync.local.yaml` is no longer part of the main workflow.
 
 ### 2. Run `plan`
 
@@ -195,11 +194,6 @@ ai-sync apply [planfile]
 ai-sync doctor
 ai-sync uninstall [--apply]
 ```
-
-Legacy note:
-
-- `ai-sync import` remains available only as a transitional helper.
-- `ai-sync init` is deprecated in this workflow.
 
 ## Testing
 

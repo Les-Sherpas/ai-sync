@@ -46,5 +46,4 @@ node_modules/
 .cursor/*
 .codex/*
 .gemini/*
-.ai-sync.local.yaml
 .ai-sync/state/
