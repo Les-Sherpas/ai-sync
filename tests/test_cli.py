@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from ai_sync import cli
+from ai_sync import command_handlers
 from ai_sync.display import PlainDisplay
 from ai_sync.gitignore import SENSITIVE_PATHS
 
@@ -62,19 +63,24 @@ def _write_project(tmp_path: Path) -> tuple[Path, Path]:
 
 
 def test_run_install_writes_config(monkeypatch, tmp_path: Path, display: PlainDisplay) -> None:
-    monkeypatch.setattr(cli, "ensure_layout", lambda: tmp_path)
-    args = argparse.Namespace(op_account="Test", force=True)
-    assert cli._run_install(args, display) == 0
+    monkeypatch.setattr(command_handlers, "ensure_layout", lambda: tmp_path)
+    assert command_handlers.run_install_command(display=display, op_account="Test", force=True) == 0
     assert "op_account" in (tmp_path / "config.toml").read_text(encoding="utf-8")
 
 
 def test_run_install_requires_op_account(monkeypatch, tmp_path: Path, display: PlainDisplay) -> None:
-    monkeypatch.setattr(cli, "ensure_layout", lambda: tmp_path)
-    monkeypatch.delenv("OP_ACCOUNT", raising=False)
-    monkeypatch.delenv("OP_SERVICE_ACCOUNT_TOKEN", raising=False)
-    monkeypatch.setattr(cli.sys.stdin, "isatty", lambda: False)
-    args = argparse.Namespace(op_account=None, force=True)
-    assert cli._run_install(args, display) == 1
+    monkeypatch.setattr(command_handlers, "ensure_layout", lambda: tmp_path)
+    stdin = type("FakeStdin", (), {"isatty": lambda self: False})()
+    assert (
+        command_handlers.run_install_command(
+            display=display,
+            op_account=None,
+            force=True,
+            environ={},
+            stdin=stdin,
+        )
+        == 1
+    )
 
 
 def test_build_parser_has_plan_and_apply() -> None:
@@ -85,16 +91,15 @@ def test_build_parser_has_plan_and_apply() -> None:
 
 def test_run_plan_saves_plan_file(monkeypatch, tmp_path: Path, display: PlainDisplay) -> None:
     config_root, project_root = _write_project(tmp_path)
-    monkeypatch.setattr(cli, "find_project_root", lambda: project_root)
-    args = argparse.Namespace(plain=True, out=None)
-    assert cli._run_plan(args, config_root, display) == 0
+    monkeypatch.setattr(command_handlers, "find_project_root", lambda: project_root)
+    assert command_handlers.run_plan_command(config_root=config_root, display=display, out=None) == 0
     assert (project_root / ".ai-sync" / "last-plan.yaml").exists()
 
 
 def test_run_apply_uses_saved_plan_when_provided(monkeypatch, tmp_path: Path, display: PlainDisplay) -> None:
     config_root, project_root = _write_project(tmp_path)
-    monkeypatch.setattr(cli, "find_project_root", lambda: project_root)
-    assert cli._run_plan(argparse.Namespace(plain=True, out=None), config_root, display) == 0
+    monkeypatch.setattr(command_handlers, "find_project_root", lambda: project_root)
+    assert command_handlers.run_plan_command(config_root=config_root, display=display, out=None) == 0
 
     captured: dict[str, object] = {}
 
@@ -102,15 +107,21 @@ def test_run_apply_uses_saved_plan_when_provided(monkeypatch, tmp_path: Path, di
         captured.update(kwargs)
         return 0
 
-    monkeypatch.setattr(cli, "run_apply", _fake_run_apply)
-    args = argparse.Namespace(plain=True, planfile=str(project_root / ".ai-sync" / "last-plan.yaml"))
-    assert cli._run_apply(args, config_root, display) == 0
+    monkeypatch.setattr(command_handlers, "run_apply", _fake_run_apply)
+    assert (
+        command_handlers.run_apply_command(
+            config_root=config_root,
+            display=display,
+            planfile=str(project_root / ".ai-sync" / "last-plan.yaml"),
+        )
+        == 0
+    )
     assert "source_roots" in captured
 
 
 def test_run_apply_without_plan_builds_fresh_plan(monkeypatch, tmp_path: Path, display: PlainDisplay) -> None:
     config_root, project_root = _write_project(tmp_path)
-    monkeypatch.setattr(cli, "find_project_root", lambda: project_root)
+    monkeypatch.setattr(command_handlers, "find_project_root", lambda: project_root)
 
     captured: dict[str, object] = {}
 
@@ -118,7 +129,6 @@ def test_run_apply_without_plan_builds_fresh_plan(monkeypatch, tmp_path: Path, d
         captured.update(kwargs)
         return 0
 
-    monkeypatch.setattr(cli, "run_apply", _fake_run_apply)
-    args = argparse.Namespace(plain=True, planfile=None)
-    assert cli._run_apply(args, config_root, display) == 0
+    monkeypatch.setattr(command_handlers, "run_apply", _fake_run_apply)
+    assert command_handlers.run_apply_command(config_root=config_root, display=display, planfile=None) == 0
     assert "manifest" in captured

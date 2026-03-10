@@ -232,7 +232,15 @@ def _build_plan(
         slug = str(meta.get("slug") or to_kebab_case(prompt_path.stem))
         for client in clients:
             if client.name == "codex":
-                _append_action(actions, target_owners, "sync", alias, "agent", agent_ref, client.get_agents_dir() / slug / "prompt.md")
+                _append_action(
+                    actions,
+                    target_owners,
+                    "sync",
+                    alias,
+                    "agent",
+                    agent_ref,
+                    client.get_agents_dir() / slug / "prompt.md",
+                )
                 _append_action(
                     actions,
                     target_owners,
@@ -244,7 +252,15 @@ def _build_plan(
                     target_key=str(client.get_agents_dir() / slug / "config.toml"),
                 )
             else:
-                _append_action(actions, target_owners, "sync", alias, "agent", agent_ref, client.get_agents_dir() / f"{slug}.md")
+                _append_action(
+                    actions,
+                    target_owners,
+                    "sync",
+                    alias,
+                    "agent",
+                    agent_ref,
+                    client.get_agents_dir() / f"{slug}.md",
+                )
 
     for skill_ref in manifest.skills:
         alias, skill_name = split_scoped_ref(skill_ref)
@@ -253,7 +269,15 @@ def _build_plan(
             raise RuntimeError(f"Selected skill {skill_ref!r} was not found.")
         kebab_name = to_kebab_case(skill_name)
         for client in clients:
-            _append_action(actions, target_owners, "sync", alias, "skill", skill_ref, client.get_skills_dir() / kebab_name)
+            _append_action(
+                actions,
+                target_owners,
+                "sync",
+                alias,
+                "skill",
+                skill_ref,
+                client.get_skills_dir() / kebab_name,
+            )
 
     for command_ref in manifest.commands:
         alias, rel_posix = split_scoped_ref(command_ref)

@@ -25,6 +25,8 @@ pipx install ai-sync
 poetry sync --with dev
 ```
 
+Poetry is configured to create an in-project `.venv/`, which is what the `just` tasks use.
+
 Optional task runner:
 
 ```bash
@@ -134,6 +136,7 @@ A source repo is a catalog of reusable artifacts:
 ├── rules/
 ├── mcp-servers.yaml
 ├── requirements.yaml
+├── defaults.yaml
 └── .env.ai-sync.tpl
 ```
 
