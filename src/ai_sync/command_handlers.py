@@ -76,7 +76,7 @@ def run_install_command(
 
 
 def run_plan_command(*, config_root: Path, display: Display, out: str | None) -> int:
-    prepared = _prepare_project_context(config_root=config_root, display=display, apply_mode=False)
+    prepared = _prepare_project_context(config_root=config_root, display=display)
     if prepared is None:
         return 1
 
@@ -88,16 +88,18 @@ def run_plan_command(*, config_root: Path, display: Display, out: str | None) ->
 
 
 def run_apply_command(*, config_root: Path, display: Display, planfile: str | None) -> int:
-    prepared = _prepare_project_context(config_root=config_root, display=display, apply_mode=True)
+    prepared = _prepare_project_context(config_root=config_root, display=display)
     if prepared is None:
         return 1
 
     if planfile:
-        validate_saved_plan(Path(planfile).expanduser(), prepared.plan_context.plan)
+        plan_to_apply = validate_saved_plan(Path(planfile).expanduser(), prepared.plan_context.plan)
         display.print(f"Validated saved plan: {planfile}", style="success")
     else:
+        plan_to_apply = prepared.plan_context.plan
         display.print("Applying a fresh plan computed from the current project state.", style="info")
-        render_plan(prepared.plan_context.plan, display)
+
+    render_plan(plan_to_apply, display)
 
     return run_apply(
         project_root=prepared.project_root,
@@ -180,7 +182,6 @@ def _prepare_project_context(
     *,
     config_root: Path,
     display: Display,
-    apply_mode: bool,
 ) -> PreparedProjectContext | None:
     if not _ensure_installed(config_root, display):
         return None
@@ -188,9 +189,6 @@ def _prepare_project_context(
     project_root = find_project_root()
     if project_root is None:
         display.panel("No .ai-sync.yaml found. Create one first.", title="No project", style="error")
-        return None
-
-    if not _ensure_gitignore_coverage(project_root=project_root, display=display, apply_mode=apply_mode):
         return None
 
     _warn_on_client_version_drift(display)
@@ -202,20 +200,6 @@ def _ensure_installed(config_root: Path, display: Display) -> bool:
     if config_root.exists() and (config_root / "config.toml").exists():
         return True
     display.panel("Run `ai-sync install` first.", title="Not set up", style="error")
-    return False
-
-
-def _ensure_gitignore_coverage(*, project_root: Path, display: Display, apply_mode: bool) -> bool:
-    uncovered = check_gitignore(project_root)
-    if not uncovered:
-        return True
-
-    message = "The following ai-sync managed paths are not covered by .gitignore:\n" + "\n".join(
-        f"  - {path}" for path in uncovered
-    )
-    if apply_mode:
-        message += "\n\nAdd them to .gitignore before applying."
-    display.panel(message, title="Gitignore gate failed", style="error")
     return False
 
 

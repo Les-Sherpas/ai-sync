@@ -5,6 +5,7 @@ from pathlib import Path
 from ai_sync import mcp_sync
 from ai_sync.clients.base import Client
 from ai_sync.state_store import StateStore
+from ai_sync.track_write import WriteSpec
 
 
 class FakeDisplay:
@@ -34,6 +35,18 @@ class DummyClient(Client):
     @property
     def name(self) -> str:
         return self._name
+
+    def build_agent_specs(self, slug: str, meta: dict, raw_content: str, prompt_src_path: Path) -> list[WriteSpec]:
+        return []
+
+    def build_command_specs(self, slug: str, raw_content: str, command_src_path: Path) -> list[WriteSpec]:
+        return []
+
+    def build_mcp_specs(self, servers: dict, secrets: dict) -> list[WriteSpec]:
+        return []
+
+    def build_client_config_specs(self, settings: dict) -> list[WriteSpec]:
+        return []
 
     def write_agent(self, slug: str, meta: dict, raw_content: str, prompt_src_path: Path, store: StateStore) -> None:
         pass

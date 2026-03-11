@@ -16,7 +16,7 @@ def display() -> PlainDisplay:
     return PlainDisplay()
 
 
-def _write_project(tmp_path: Path) -> tuple[Path, Path]:
+def _write_project(tmp_path: Path, *, with_gitignore: bool = True) -> tuple[Path, Path]:
     config_root = tmp_path / "config"
     config_root.mkdir()
     (config_root / "config.toml").write_text('op_account = "x"\n', encoding="utf-8")
@@ -38,7 +38,8 @@ def _write_project(tmp_path: Path) -> tuple[Path, Path]:
 
     project_root = tmp_path / "project"
     project_root.mkdir()
-    (project_root / ".gitignore").write_text("\n".join(SENSITIVE_PATHS) + "\n", encoding="utf-8")
+    if with_gitignore:
+        (project_root / ".gitignore").write_text("\n".join(SENSITIVE_PATHS) + "\n", encoding="utf-8")
     (project_root / ".ai-sync.yaml").write_text(
         "\n".join(
             [
@@ -97,6 +98,13 @@ def test_run_plan_saves_plan_file(monkeypatch, tmp_path: Path, display: PlainDis
     assert (project_root / ".ai-sync" / "last-plan.yaml").exists()
 
 
+def test_run_plan_without_gitignore_still_succeeds(monkeypatch, tmp_path: Path, display: PlainDisplay) -> None:
+    config_root, project_root = _write_project(tmp_path, with_gitignore=False)
+    monkeypatch.setattr(command_handlers, "find_project_root", lambda: project_root)
+    assert command_handlers.run_plan_command(config_root=config_root, display=display, out=None) == 0
+    assert (project_root / ".ai-sync" / "last-plan.yaml").exists()
+
+
 def test_run_apply_uses_saved_plan_when_provided(monkeypatch, tmp_path: Path, display: PlainDisplay) -> None:
     config_root, project_root = _write_project(tmp_path)
     monkeypatch.setattr(command_handlers, "find_project_root", lambda: project_root)
@@ -133,3 +141,32 @@ def test_run_apply_without_plan_builds_fresh_plan(monkeypatch, tmp_path: Path, d
     monkeypatch.setattr(command_handlers, "run_apply", _fake_run_apply)
     assert command_handlers.run_apply_command(config_root=config_root, display=display, planfile=None) == 0
     assert "manifest" in captured
+
+
+def test_run_apply_without_gitignore_still_succeeds(monkeypatch, tmp_path: Path, display: PlainDisplay) -> None:
+    config_root, project_root = _write_project(tmp_path, with_gitignore=False)
+    monkeypatch.setattr(command_handlers, "find_project_root", lambda: project_root)
+
+    captured: dict[str, object] = {}
+
+    def _fake_run_apply(**kwargs):
+        captured.update(kwargs)
+        return 0
+
+    monkeypatch.setattr(command_handlers, "run_apply", _fake_run_apply)
+    assert command_handlers.run_apply_command(config_root=config_root, display=display, planfile=None) == 0
+    assert "manifest" in captured
+
+
+def test_run_apply_prints_plan_and_not_legacy_sync_sections(
+    monkeypatch, tmp_path: Path, display: PlainDisplay, capsys
+) -> None:
+    config_root, project_root = _write_project(tmp_path)
+    monkeypatch.setattr(command_handlers, "find_project_root", lambda: project_root)
+
+    assert command_handlers.run_apply_command(config_root=config_root, display=display, planfile=None) == 0
+
+    out = capsys.readouterr().out
+    assert "Planned Actions" in out
+    assert "Syncing Agents" not in out
+    assert "Syncing Skills" not in out

@@ -171,6 +171,7 @@ Rules:
 
 `ai-sync` manages project-local files such as:
 
+- `AGENTS.generated.md`
 - `.codex/*`
 - `.cursor/*`
 - `.gemini/*`
@@ -181,7 +182,9 @@ Rules:
 
 It does not modify machine-global client config under `~/.codex`, `~/.cursor`, or `~/.gemini`.
 
-Make sure these paths are covered by `.gitignore`.
+When rules are selected, `ai-sync` writes the merged content to `AGENTS.generated.md` and maintains a small managed link block in `AGENTS.md` instead of replacing the whole file.
+
+You should usually cover these paths with `.gitignore`, but `ai-sync` no longer blocks `plan` or `apply` when they are not ignored.
 
 ## Reliability rules
 

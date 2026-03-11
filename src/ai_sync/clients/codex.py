@@ -18,10 +18,10 @@ class CodexClient(Client):
     def name(self) -> str:
         return "codex"
 
-    def write_agent(self, slug: str, meta: dict, raw_content: str, prompt_src_path: Path, store: StateStore) -> None:
+    def build_agent_specs(self, slug: str, meta: dict, raw_content: str, prompt_src_path: Path) -> list[WriteSpec]:
         agent_dir = self.get_agents_dir() / slug
         codex_prompt_path = agent_dir / "prompt.md"
-        specs = [
+        return [
             WriteSpec(
                 file_path=codex_prompt_path,
                 format="text",
@@ -53,25 +53,27 @@ class CodexClient(Client):
                 value="live" if meta.get("web_search", True) else "off",
             ),
         ]
-        track_write_blocks(specs, store)
 
-    def write_command(self, slug: str, raw_content: str, command_src_path: Path, store: StateStore) -> None:
+    def write_agent(self, slug: str, meta: dict, raw_content: str, prompt_src_path: Path, store: StateStore) -> None:
+        track_write_blocks(self.build_agent_specs(slug, meta, raw_content, prompt_src_path), store)
+
+    def build_command_specs(self, slug: str, raw_content: str, command_src_path: Path) -> list[WriteSpec]:
         if command_src_path.suffix == ".mdc":
             target_dir = self.config_dir / "rules"
         else:
             target_dir = self.config_dir / "commands"
         target_path = target_dir / command_src_path
-        track_write_blocks(
-            [
-                WriteSpec(
-                    file_path=target_path,
-                    format="text",
-                    target=f"ai-sync:command:{slug}",
-                    value=raw_content,
-                )
-            ],
-            store,
-        )
+        return [
+            WriteSpec(
+                file_path=target_path,
+                format="text",
+                target=f"ai-sync:command:{slug}",
+                value=raw_content,
+            )
+        ]
+
+    def write_command(self, slug: str, raw_content: str, command_src_path: Path, store: StateStore) -> None:
+        track_write_blocks(self.build_command_specs(slug, raw_content, command_src_path), store)
 
     def _build_mcp_entry(self, server_id: str, server: dict, secrets: dict) -> dict:
         secret_srv = self._get_secret_for_server(server_id, secrets)
@@ -114,14 +116,14 @@ class CodexClient(Client):
                 print(f"  Warning: Invalid timeout_seconds for server '{server_id}': {server['timeout_seconds']!r}")
         return table
 
-    def sync_mcp(self, servers: dict, secrets: dict, store: StateStore) -> None:
+    def build_mcp_specs(self, servers: dict, secrets: dict) -> list[WriteSpec]:
         codex_mcp: dict = {}
         for sid, srv in servers.items():
             entry = self._build_mcp_entry(sid, srv, secrets)
             codex_mcp[sid] = entry
 
         config_path = self.config_dir / "config.toml"
-        specs: list[WriteSpec] = [
+        specs = [
             WriteSpec(
                 file_path=config_path,
                 format="toml",
@@ -130,9 +132,24 @@ class CodexClient(Client):
             )
             for sid, entry in codex_mcp.items()
         ]
+        specs.append(
+            WriteSpec(
+                file_path=self.config_dir / "mcp.env",
+                format="text",
+                target="ai-sync:codex-mcp-env",
+                value=DELETE,
+            )
+        )
+        return specs
+
+    def sync_mcp(self, servers: dict, secrets: dict, store: StateStore) -> None:
+        config_path = self.config_dir / "config.toml"
+        specs = self.build_mcp_specs(servers, secrets)
         existing_targets = store.list_targets(config_path, "toml", "/mcp_servers/")
+        desired_targets = {spec.target for spec in specs if spec.file_path == config_path and spec.target.startswith("/mcp_servers/")}
         existing_ids = {t.split("/", 2)[2] for t in existing_targets if t.count("/") >= 2}
-        for sid in sorted(existing_ids - set(codex_mcp.keys())):
+        desired_ids = {t.split("/", 2)[2] for t in desired_targets if t.count("/") >= 2}
+        for sid in sorted(existing_ids - desired_ids):
             specs.append(
                 WriteSpec(
                     file_path=config_path,
@@ -143,22 +160,19 @@ class CodexClient(Client):
             )
         if specs:
             track_write_blocks(specs, store)
-        if any(e.get("env") for e in codex_mcp.values()):
+        if any(spec.file_path == config_path and spec.target.startswith("/mcp_servers/") for spec in specs):
+            codex_mcp = {
+                spec.target.split("/", 2)[2]: spec.value
+                for spec in specs
+                if spec.file_path == config_path and spec.target.startswith("/mcp_servers/") and spec.value is not DELETE
+            }
+        else:
+            codex_mcp = {}
+        if any(isinstance(e, dict) and e.get("env") for e in codex_mcp.values()):
             self._set_restrictive_permissions(config_path)
             self._warn_plaintext_secrets(config_path)
 
         mcp_env_path = self.config_dir / "mcp.env"
-        track_write_blocks(
-            [
-                WriteSpec(
-                    file_path=mcp_env_path,
-                    format="text",
-                    target="ai-sync:codex-mcp-env",
-                    value=DELETE,
-                )
-            ],
-            store,
-        )
         if mcp_env_path.exists() and not mcp_env_path.read_text(encoding="utf-8").strip():
             mcp_env_path.unlink(missing_ok=True)
 
@@ -185,12 +199,12 @@ class CodexClient(Client):
             out["sandbox_mode"] = "workspace-write"
         return out
 
-    def sync_client_config(self, settings: dict, store: StateStore) -> None:
+    def build_client_config_specs(self, settings: dict) -> list[WriteSpec]:
         updates = self._build_client_config(settings)
         if not updates:
-            return
+            return []
         config_path = self.config_dir / "config.toml"
-        specs: list[WriteSpec] = []
+        specs = []
         if "suppress_unstable_features_warning" in updates:
             specs.append(
                 WriteSpec(
@@ -238,24 +252,30 @@ class CodexClient(Client):
                     value=updates["sandbox_mode"],
                 )
             )
+        return specs
+
+    def sync_client_config(self, settings: dict, store: StateStore) -> None:
+        specs = self.build_client_config_specs(settings)
         if specs:
             track_write_blocks(specs, store)
 
-    def sync_instructions(self, instructions_content: str, store: StateStore) -> None:
+    def build_instructions_specs(self, instructions_content: str) -> list[WriteSpec]:
         if not instructions_content.strip():
-            return
+            return []
         config_path = self.config_dir / "config.toml"
-        track_write_blocks(
-            [
-                WriteSpec(
-                    file_path=config_path,
-                    format="toml",
-                    target="/developer_instructions",
-                    value=instructions_content.strip(),
-                )
-            ],
-            store,
-        )
+        return [
+            WriteSpec(
+                file_path=config_path,
+                format="toml",
+                target="/developer_instructions",
+                value=instructions_content.strip(),
+            )
+        ]
+
+    def sync_instructions(self, instructions_content: str, store: StateStore) -> None:
+        specs = self.build_instructions_specs(instructions_content)
+        if specs:
+            track_write_blocks(specs, store)
 
     def post_apply(self) -> None:
         return

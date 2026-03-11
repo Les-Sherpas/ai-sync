@@ -6,6 +6,7 @@ from ai_sync import sync_runner
 from ai_sync.clients.base import Client
 from ai_sync.project import ProjectManifest
 from ai_sync.state_store import StateStore
+from ai_sync.track_write import WriteSpec
 
 
 class FakeDisplay:
@@ -40,6 +41,40 @@ class DummyClient(Client):
     def config_dir(self) -> Path:
         return self._base / f".{self._name}"
 
+    def build_agent_specs(self, slug: str, meta: dict, raw_content: str, prompt_src_path: Path) -> list[WriteSpec]:
+        return [
+            WriteSpec(
+                file_path=self.get_agents_dir() / slug / "prompt.md",
+                format="text",
+                target=f"ai-sync:agent:{slug}",
+                value=raw_content,
+            )
+        ]
+
+    def build_command_specs(self, slug: str, raw_content: str, command_src_path: Path) -> list[WriteSpec]:
+        return [
+            WriteSpec(
+                file_path=self.config_dir / "commands" / command_src_path,
+                format="text",
+                target=f"ai-sync:command:{slug}",
+                value=raw_content,
+            )
+        ]
+
+    def build_mcp_specs(self, servers: dict, secrets: dict) -> list[WriteSpec]:
+        return [
+            WriteSpec(
+                file_path=self.config_dir / "config.toml",
+                format="toml",
+                target=f"/mcp_servers/{sid}",
+                value=server,
+            )
+            for sid, server in servers.items()
+        ]
+
+    def build_client_config_specs(self, settings: dict) -> list[WriteSpec]:
+        return []
+
     def write_agent(self, slug: str, meta: dict, raw_content: str, prompt_src_path: Path, store: StateStore) -> None:
         self.calls.append(f"write_agent:{self._name}:{slug}")
         target = self.get_agents_dir() / slug / "prompt.md"
@@ -65,10 +100,12 @@ def _make_repo_root(tmp_path: Path) -> Path:
     (root / "prompts").mkdir(parents=True)
     (root / "skills" / "skill-one").mkdir(parents=True)
     (root / "commands").mkdir(parents=True)
+    (root / "rules").mkdir(parents=True)
     (root / ".env.ai-sync.tpl").write_text("TOKEN=abc\n", encoding="utf-8")
     (root / "prompts" / "agent.md").write_text("## Task\nDo thing\n", encoding="utf-8")
     (root / "skills" / "skill-one" / "SKILL.md").write_text("# Skill\n", encoding="utf-8")
     (root / "commands" / "shortcut.md").write_text("Do a thing\n", encoding="utf-8")
+    (root / "rules" / "commit.md").write_text("Commit rules\n", encoding="utf-8")
     (root / "mcp-servers" / "srv").mkdir(parents=True)
     (root / "mcp-servers" / "srv" / "server.yaml").write_text(
         'method: stdio\ncommand: npx\nenv:\n  TOKEN: "$TOKEN"\n',
@@ -166,3 +203,43 @@ def test_sync_agents_uses_scoped_source_alias(tmp_path: Path, monkeypatch) -> No
 
     written = client.get_agents_dir() / "agent" / "prompt.md"
     assert written.read_text(encoding="utf-8") == "## From A\n"
+
+
+def test_sync_rules_writes_generated_file_and_preserves_agents_md(tmp_path: Path, monkeypatch) -> None:
+    repo_root = _make_repo_root(tmp_path)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    display = FakeDisplay()
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+    agents_md = project_root / "AGENTS.md"
+    agents_md.write_text("# User Instructions\n\nKeep this file.\n", encoding="utf-8")
+    store = StateStore(project_root)
+
+    sync_runner.sync_rules(project_root, {"company": repo_root}, ["company/commit"], False, store, display)
+
+    generated = project_root / "AGENTS.generated.md"
+    assert generated.read_text(encoding="utf-8") == "Commit rules\n"
+
+    agents_content = agents_md.read_text(encoding="utf-8")
+    assert "# User Instructions" in agents_content
+    assert "[`AGENTS.generated.md`](./AGENTS.generated.md)" in agents_content
+    assert "Commit rules" not in agents_content
+
+
+def test_sync_rules_empty_selection_removes_generated_file_but_keeps_agents_md(tmp_path: Path, monkeypatch) -> None:
+    repo_root = _make_repo_root(tmp_path)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    display = FakeDisplay()
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+    agents_md = project_root / "AGENTS.md"
+    agents_md.write_text("# User Instructions\n", encoding="utf-8")
+    store = StateStore(project_root)
+
+    sync_runner.sync_rules(project_root, {"company": repo_root}, ["company/commit"], False, store, display)
+    sync_runner.sync_rules(project_root, {"company": repo_root}, [], False, store, display)
+
+    assert not (project_root / "AGENTS.generated.md").exists()
+    agents_content = agents_md.read_text(encoding="utf-8")
+    assert agents_content == "# User Instructions\n"
+    assert "AGENTS.generated.md" not in agents_content

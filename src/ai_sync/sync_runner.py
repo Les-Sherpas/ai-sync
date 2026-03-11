@@ -17,14 +17,179 @@ from ai_sync.helpers import (
     to_kebab_case,
     validate_client_settings,
 )
-from ai_sync.mcp_sync import sync_mcp_servers
+from ai_sync.mcp_sync import resolve_servers_for_client, sync_mcp_servers
 from ai_sync.path_ops import escape_path_segment
 from ai_sync.project import ProjectManifest, split_scoped_ref
 from ai_sync.state_store import StateStore
-from ai_sync.track_write import DELETE, WriteSpec, track_write_blocks
+from ai_sync.track_write import DELETE, WriteSpec, _is_full_file_target, track_write_blocks
 
 GENERIC_METADATA_KEYS = {"slug", "name", "description"}
 SKIP_PATTERNS = {".venv", "node_modules", "__pycache__", ".git", ".DS_Store"}
+
+
+class _ApplyDisplayProxy:
+    def __init__(self, base: Display) -> None:
+        self._base = base
+
+    def rule(self, title: str, style: str = "section") -> None:
+        return
+
+    def print(self, msg: str, style: str = "normal") -> None:
+        if style == "warning":
+            self._base.print(msg, style=style)
+
+    def panel(self, content: str, *, title: str = "", style: str = "normal") -> None:
+        if style == "error":
+            self._base.panel(content, title=title, style=style)
+
+    def table(self, headers: tuple[str, ...], rows: list[tuple[str, ...]]) -> None:
+        return
+
+
+def _collect_desired_target_keys(
+    *,
+    project_root: Path,
+    source_roots: Mapping[str, Path],
+    manifest: ProjectManifest,
+    mcp_manifest: dict,
+    runtime_env: dict[str, str],
+    clients: Sequence[Client],
+    display: Display,
+) -> set[tuple[str, str, str]]:
+    desired: set[tuple[str, str, str]] = set()
+
+    def add_specs(specs: list[WriteSpec]) -> None:
+        for spec in specs:
+            desired.add((str(spec.file_path), spec.format, spec.target))
+
+    for agent_ref in manifest.agents:
+        alias, agent_name = split_scoped_ref(agent_ref)
+        source_root = source_roots[alias]
+        prompt_path = source_root / "prompts" / f"{agent_name}.md"
+        raw_content = prompt_path.read_text(encoding="utf-8")
+        meta = load_prompt_metadata(prompt_path, raw_content, display)
+        slug = meta.get("slug", to_kebab_case(prompt_path.stem))
+        for client in clients:
+            add_specs(client.build_agent_specs(slug, meta, raw_content, prompt_path))
+
+    for skill_ref in manifest.skills:
+        alias, skill_name = split_scoped_ref(skill_ref)
+        skill_dir = source_roots[alias] / "skills" / skill_name
+        kebab_name = to_kebab_case(skill_name)
+        for client in clients:
+            target_skill_dir = client.get_skills_dir() / kebab_name
+            for sub in skill_dir.rglob("*"):
+                rel = sub.relative_to(skill_dir)
+                if any(part in SKIP_PATTERNS for part in rel.parts) or sub.is_dir():
+                    continue
+                target = target_skill_dir / rel
+                if sub.name.endswith(".json"):
+                    fmt = "json"
+                elif sub.name.endswith(".toml"):
+                    fmt = "toml"
+                elif sub.name.endswith(".yaml") or sub.name.endswith(".yml"):
+                    fmt = "yaml"
+                else:
+                    fmt = "text"
+                content = sub.read_text(encoding="utf-8")
+                if fmt == "text":
+                    add_specs(
+                        [
+                            WriteSpec(
+                                file_path=target,
+                                format=fmt,
+                                target=f"ai-sync:skill:{kebab_name}:{rel.as_posix()}",
+                                value=content,
+                            )
+                        ]
+                    )
+                else:
+                    add_specs(_flatten_structured_to_specs(target, fmt, _parse_structured_content(content, fmt)))
+
+    for command_ref in manifest.commands:
+        alias, rel_posix = split_scoped_ref(command_ref)
+        command_path = source_roots[alias] / "commands" / rel_posix
+        raw_content = command_path.read_text(encoding="utf-8")
+        rel = Path(rel_posix)
+        for client in clients:
+            add_specs(client.build_command_specs(command_ref, raw_content, rel))
+
+    if manifest.rules:
+        sections: list[str] = []
+        for rule_ref in manifest.rules:
+            alias, rule_name = split_scoped_ref(rule_ref)
+            rule_path = source_roots[alias] / "rules" / f"{rule_name}.md"
+            sections.append(rule_path.read_text(encoding="utf-8").strip())
+        parts: list[str] = []
+        if runtime_env:
+            parts.append(ENV_HINT)
+        parts.extend(sections)
+        add_specs(
+            [
+                WriteSpec(
+                    file_path=project_root / GENERATED_AGENTS_FILENAME,
+                    format="text",
+                    target="ai-sync:rules",
+                    value="\n\n".join(parts) + "\n",
+                ),
+                WriteSpec(
+                    file_path=project_root / "AGENTS.md",
+                    format="text",
+                    target=RULES_LINK_TARGET,
+                    value=_rules_link_content(),
+                ),
+            ]
+        )
+
+    for client in clients:
+        add_specs(client.build_mcp_specs(resolve_servers_for_client(mcp_manifest, client.name), {"servers": {}}))
+
+    if runtime_env:
+        add_specs(
+            [
+                WriteSpec(
+                    file_path=project_root / ".env.ai-sync",
+                    format="text",
+                    target="ai-sync:env",
+                    value="\n".join(f"{key}={value}" for key, value in sorted(runtime_env.items())) + "\n",
+                )
+            ]
+        )
+
+    if manifest.settings:
+        for client in clients:
+            add_specs(client.build_client_config_specs(manifest.settings))
+
+    instructions_path = project_root / ".ai-sync" / "instructions.md"
+    if instructions_path.exists():
+        content = instructions_path.read_text(encoding="utf-8")
+        if content.strip():
+            for client in clients:
+                add_specs(client.build_instructions_specs(content))
+
+    return desired
+
+
+def _build_stale_delete_specs(
+    store: StateStore, desired_targets: set[tuple[str, str, str]]
+) -> list[WriteSpec]:
+    stale_specs: list[WriteSpec] = []
+    desired_targets_by_file: dict[tuple[str, str], set[str]] = {}
+    for file_path, fmt, target in desired_targets:
+        desired_targets_by_file.setdefault((file_path, fmt), set()).add(target)
+    for entry in store.list_entries():
+        file_path = entry.get("file_path")
+        fmt = entry.get("format")
+        target = entry.get("target")
+        if not isinstance(file_path, str) or not isinstance(fmt, str) or not isinstance(target, str):
+            continue
+        if (file_path, fmt, target) in desired_targets:
+            continue
+        same_file_targets = desired_targets_by_file.get((file_path, fmt), set())
+        if _is_full_file_target(target) and any(other != target for other in same_file_targets):
+            continue
+        stale_specs.append(WriteSpec(file_path=Path(file_path), format=fmt, target=target, value=DELETE))
+    return stale_specs
 
 
 def load_prompt_metadata(prompt_path: Path, content: str, display: Display) -> dict:
@@ -204,6 +369,16 @@ ENV_HINT = (
     "> **Environment variables** are defined in `.env.ai-sync` at the project root."
     " Source it before running commands that need credentials: `source .env.ai-sync`\n"
 )
+GENERATED_AGENTS_FILENAME = "AGENTS.generated.md"
+RULES_LINK_TARGET = "ai-sync:rules-link"
+
+
+def _rules_link_content() -> str:
+    return (
+        "## ai-sync\n\n"
+        f"Additional project instructions managed by ai-sync live in "
+        f"[`{GENERATED_AGENTS_FILENAME}`](./{GENERATED_AGENTS_FILENAME}).\n"
+    )
 
 
 def sync_rules(
@@ -214,9 +389,20 @@ def sync_rules(
     store: StateStore,
     display: Display,
 ) -> None:
-    """Merge selected rule files into a single AGENTS.md at the project root."""
+    """Write generated rules and maintain a small link block in AGENTS.md."""
     display.rule("Syncing Rules")
+    generated_path = project_root / GENERATED_AGENTS_FILENAME
+    agents_md_path = project_root / "AGENTS.md"
     if not rule_list:
+        track_write_blocks(
+            [
+                WriteSpec(file_path=generated_path, format="text", target="ai-sync:rules", value=DELETE),
+                WriteSpec(file_path=agents_md_path, format="text", target=RULES_LINK_TARGET, value=DELETE),
+            ],
+            store,
+        )
+        if generated_path.exists() and not generated_path.read_text(encoding="utf-8").strip():
+            generated_path.unlink(missing_ok=True)
         display.print("No rules selected", style="dim")
         return
 
@@ -237,6 +423,15 @@ def sync_rules(
         rows.append((rule_ref,))
 
     if not sections:
+        track_write_blocks(
+            [
+                WriteSpec(file_path=generated_path, format="text", target="ai-sync:rules", value=DELETE),
+                WriteSpec(file_path=agents_md_path, format="text", target=RULES_LINK_TARGET, value=DELETE),
+            ],
+            store,
+        )
+        if generated_path.exists() and not generated_path.read_text(encoding="utf-8").strip():
+            generated_path.unlink(missing_ok=True)
         display.print("No rules resolved", style="dim")
         return
 
@@ -244,16 +439,21 @@ def sync_rules(
     if has_env:
         parts.append(ENV_HINT)
     parts.extend(sections)
-    agents_md_content = "\n\n".join(parts) + "\n"
-    agents_md_path = project_root / "AGENTS.md"
+    generated_content = "\n\n".join(parts) + "\n"
 
     track_write_blocks(
         [
             WriteSpec(
-                file_path=agents_md_path,
+                file_path=generated_path,
                 format="text",
                 target="ai-sync:rules",
-                value=agents_md_content,
+                value=generated_content,
+            ),
+            WriteSpec(
+                file_path=agents_md_path,
+                format="text",
+                target=RULES_LINK_TARGET,
+                value=_rules_link_content(),
             )
         ],
         store,
@@ -396,16 +596,36 @@ def run_apply(
     clients = create_clients(project_root)
     store = StateStore(project_root)
     store.load()
+    apply_display = _ApplyDisplayProxy(display)
+    desired_targets = _collect_desired_target_keys(
+        project_root=project_root,
+        source_roots=source_roots,
+        manifest=manifest,
+        mcp_manifest=mcp_manifest,
+        runtime_env=runtime_env,
+        clients=clients,
+        display=display,
+    )
 
     has_env = bool(runtime_env)
-    sync_env_file(project_root, runtime_env, store, display)
-    sync_agents(source_roots, manifest.agents, clients, store, display)
-    sync_skills(source_roots, manifest.skills, clients, store, display)
-    sync_commands(source_roots, manifest.commands, clients, store, display)
-    sync_rules(project_root, source_roots, manifest.rules, has_env, store, display)
-    sync_mcp_servers(mcp_manifest, clients, secrets, store, display)
-    sync_client_config(manifest.settings, clients, store, display)
-    sync_instructions(project_root, clients, store, display)
+    sync_env_file(project_root, runtime_env, store, apply_display)
+    sync_agents(source_roots, manifest.agents, clients, store, apply_display)
+    sync_skills(source_roots, manifest.skills, clients, store, apply_display)
+    sync_commands(source_roots, manifest.commands, clients, store, apply_display)
+    sync_rules(project_root, source_roots, manifest.rules, has_env, store, apply_display)
+    sync_mcp_servers(mcp_manifest, clients, secrets, store, apply_display)
+    sync_client_config(manifest.settings, clients, store, apply_display)
+    sync_instructions(project_root, clients, store, apply_display)
+    stale_delete_specs = _build_stale_delete_specs(store, desired_targets)
+    if stale_delete_specs:
+        track_write_blocks(stale_delete_specs, store)
+        desired_files = {file_path for file_path, _, _ in desired_targets}
+        for spec in stale_delete_specs:
+            file_path = spec.file_path
+            if str(file_path) in desired_files or not file_path.exists():
+                continue
+            if file_path.is_file() and not file_path.read_text(encoding="utf-8").strip():
+                file_path.unlink(missing_ok=True)
 
     store.save()
 

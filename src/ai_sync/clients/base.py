@@ -12,6 +12,7 @@ import tomli
 import tomli_w
 
 from ai_sync.state_store import StateStore
+from ai_sync.track_write import WriteSpec
 
 
 class Client(ABC):
@@ -92,17 +93,32 @@ class Client(ABC):
         self, slug: str, meta: dict, raw_content: str, prompt_src_path: Path, store: StateStore
     ) -> None: ...
 
+    def build_agent_specs(self, slug: str, meta: dict, raw_content: str, prompt_src_path: Path) -> list[WriteSpec]:
+        raise NotImplementedError
+
     @abstractmethod
     def write_command(self, slug: str, raw_content: str, command_src_path: Path, store: StateStore) -> None: ...
+
+    def build_command_specs(self, slug: str, raw_content: str, command_src_path: Path) -> list[WriteSpec]:
+        raise NotImplementedError
 
     @abstractmethod
     def sync_mcp(self, servers: dict, secrets: dict, store: StateStore) -> None: ...
 
+    def build_mcp_specs(self, servers: dict, secrets: dict) -> list[WriteSpec]:
+        raise NotImplementedError
+
     @abstractmethod
     def sync_client_config(self, settings: dict, store: StateStore) -> None: ...
 
+    def build_client_config_specs(self, settings: dict) -> list[WriteSpec]:
+        raise NotImplementedError
+
     def sync_instructions(self, instructions_content: str, store: StateStore) -> None:
         pass
+
+    def build_instructions_specs(self, instructions_content: str) -> list[WriteSpec]:
+        return []
 
     def post_apply(self) -> None:
         """Deprecated hook kept for compatibility; apply stays project-scoped in V1."""

@@ -6,6 +6,7 @@ import pytest
 
 from ai_sync.display import PlainDisplay
 from ai_sync.planning import build_plan_context, default_plan_path, save_plan, validate_saved_plan
+from ai_sync.sync_runner import run_apply
 
 
 def _write_project(tmp_path: Path) -> tuple[Path, Path]:
@@ -65,6 +66,116 @@ def test_build_plan_context_marks_secret_backed_outputs(tmp_path: Path) -> None:
     context = build_plan_context(project_root, config_root, display)
     secret_targets = {action.target for action in context.plan.actions if action.secret_backed}
     assert str(project_root / ".env.ai-sync") in secret_targets
+
+
+def test_build_plan_context_targets_generated_rules_file(tmp_path: Path) -> None:
+    config_root, project_root = _write_project(tmp_path)
+    display = PlainDisplay()
+    context = build_plan_context(project_root, config_root, display)
+
+    rule_targets = {action.target for action in context.plan.actions if action.kind == "rule"}
+    assert rule_targets == {str(project_root / "AGENTS.generated.md")}
+
+    link_targets = {action.target for action in context.plan.actions if action.kind == "rule-link"}
+    assert link_targets == {str(project_root / "AGENTS.md")}
+
+
+def test_build_plan_context_hides_unchanged_managed_outputs(tmp_path: Path) -> None:
+    config_root, project_root = _write_project(tmp_path)
+    display = PlainDisplay()
+    context = build_plan_context(project_root, config_root, display)
+
+    assert run_apply(
+        project_root=project_root,
+        source_roots={alias: source.root for alias, source in context.resolved_sources.items()},
+        manifest=context.manifest,
+        mcp_manifest=context.mcp_manifest,
+        secrets=context.secrets,
+        runtime_env=context.runtime_env,
+        display=display,
+    ) == 0
+
+    current = build_plan_context(project_root, config_root, display)
+    assert current.plan.actions == []
+
+
+def test_build_plan_context_only_shows_changed_rule_outputs(tmp_path: Path) -> None:
+    config_root, project_root = _write_project(tmp_path)
+    display = PlainDisplay()
+    context = build_plan_context(project_root, config_root, display)
+
+    assert run_apply(
+        project_root=project_root,
+        source_roots={alias: source.root for alias, source in context.resolved_sources.items()},
+        manifest=context.manifest,
+        mcp_manifest=context.mcp_manifest,
+        secrets=context.secrets,
+        runtime_env=context.runtime_env,
+        display=display,
+    ) == 0
+
+    rule_path = tmp_path / "company-source" / "rules" / "commit.md"
+    rule_path.write_text("Updated commit rules\n", encoding="utf-8")
+
+    current = build_plan_context(project_root, config_root, display)
+    assert {action.kind for action in current.plan.actions} == {"rule"}
+    assert {action.target for action in current.plan.actions} == {str(project_root / "AGENTS.generated.md")}
+
+
+def test_build_plan_context_and_apply_show_and_execute_delete_for_removed_command(tmp_path: Path) -> None:
+    config_root, project_root = _write_project(tmp_path)
+    display = PlainDisplay()
+    context = build_plan_context(project_root, config_root, display)
+
+    assert run_apply(
+        project_root=project_root,
+        source_roots={alias: source.root for alias, source in context.resolved_sources.items()},
+        manifest=context.manifest,
+        mcp_manifest=context.mcp_manifest,
+        secrets=context.secrets,
+        runtime_env=context.runtime_env,
+        display=display,
+    ) == 0
+
+    codex_command = project_root / ".codex" / "commands" / "session-summary.md"
+    assert codex_command.exists()
+
+    manifest_path = project_root / ".ai-sync.yaml"
+    manifest_path.write_text(
+        "\n".join(
+            [
+                "sources:",
+                "  company:",
+                f"    source: {tmp_path / 'company-source'}",
+                "agents:",
+                "  - company/engineer",
+                "skills:",
+                "  - company/code-review",
+                "rules:",
+                "  - company/commit",
+                "mcp-servers:",
+                "  - company/context7",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    current = build_plan_context(project_root, config_root, display)
+    delete_actions = [action for action in current.plan.actions if action.action == "delete"]
+    assert any(action.kind == "command" for action in delete_actions)
+
+    assert run_apply(
+        project_root=project_root,
+        source_roots={alias: source.root for alias, source in current.resolved_sources.items()},
+        manifest=current.manifest,
+        mcp_manifest=current.mcp_manifest,
+        secrets=current.secrets,
+        runtime_env=current.runtime_env,
+        display=display,
+    ) == 0
+
+    assert not codex_command.exists()
 
 
 def test_saved_plan_validates_against_current_inputs(tmp_path: Path) -> None:
