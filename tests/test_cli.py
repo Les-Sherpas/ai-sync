@@ -30,8 +30,9 @@ def _write_project(tmp_path: Path) -> tuple[Path, Path]:
     (source_root / "commands" / "session-summary.md").write_text("Summarize\n", encoding="utf-8")
     (source_root / "rules").mkdir(parents=True)
     (source_root / "rules" / "commit.md").write_text("Commit rules\n", encoding="utf-8")
-    (source_root / "mcp-servers.yaml").write_text(
-        "servers:\n  context7:\n    method: stdio\n    command: npx\n",
+    (source_root / "mcp-servers" / "context7").mkdir(parents=True)
+    (source_root / "mcp-servers" / "context7" / "server.yaml").write_text(
+        "method: stdio\ncommand: npx\n",
         encoding="utf-8",
     )
 

@@ -69,8 +69,9 @@ def _make_repo_root(tmp_path: Path) -> Path:
     (root / "prompts" / "agent.md").write_text("## Task\nDo thing\n", encoding="utf-8")
     (root / "skills" / "skill-one" / "SKILL.md").write_text("# Skill\n", encoding="utf-8")
     (root / "commands" / "shortcut.md").write_text("Do a thing\n", encoding="utf-8")
-    (root / "mcp-servers.yaml").write_text(
-        'servers:\n  srv:\n    method: stdio\n    command: npx\n    env:\n      TOKEN: "$TOKEN"\n',
+    (root / "mcp-servers" / "srv").mkdir(parents=True)
+    (root / "mcp-servers" / "srv" / "server.yaml").write_text(
+        'method: stdio\ncommand: npx\nenv:\n  TOKEN: "$TOKEN"\n',
         encoding="utf-8",
     )
     return root

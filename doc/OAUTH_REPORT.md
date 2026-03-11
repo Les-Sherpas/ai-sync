@@ -251,11 +251,10 @@ When a server has `oauth.enabled: true`, ai-sync behaves differently per client:
 No special handling needed. All three clients handle the OAuth flow automatically.
 
 ```yaml
-# mcp-servers.yaml
-my-server:
-  method: http
-  httpUrl: https://mcp.example.com/mcp
-  # no oauth section needed — DCR is automatic
+# mcp-servers/my-server/server.yaml
+method: http
+httpUrl: https://mcp.example.com/mcp
+# no oauth section needed — DCR is automatic
 ```
 
 #### Servers without DCR (Google OAuth, Azure AD, Slack…)
@@ -263,21 +262,20 @@ my-server:
 Use stdio + `mcp-remote --static-oauth-client-info` for Codex and Cursor. Gemini can also use this approach (works fine), or use the native `oauth` section with pre-registered credentials.
 
 ```yaml
-# mcp-servers.yaml — universal workaround (works for all three clients)
-my-server:
-  method: stdio
-  command: sh
-  args:
-    [
-      "-c",
-      'npx -y mcp-remote https://api.example.com/mcp 3335 --static-oauth-client-info "{\"client_id\":\"$$MY_CLIENT_ID\",\"client_secret\":\"$$MY_CLIENT_SECRET\"}"',
-    ]
-  env:
-    MY_CLIENT_ID: "${MY_CLIENT_ID}"
-    MY_CLIENT_SECRET: "${MY_CLIENT_SECRET}"
+# mcp-servers/my-server/server.yaml — universal workaround
+method: stdio
+command: sh
+args:
+  [
+    "-c",
+    'npx -y mcp-remote https://api.example.com/mcp 3335 --static-oauth-client-info "{\"client_id\":\"$$MY_CLIENT_ID\",\"client_secret\":\"$$MY_CLIENT_SECRET\"}"',
+  ]
+env:
+  MY_CLIENT_ID: "${MY_CLIENT_ID}"
+  MY_CLIENT_SECRET: "${MY_CLIENT_SECRET}"
 ```
 
-> **Note on `$$` escaping**: ai-sync's `env_loader.py` treats `$$` as an escape for a literal `$`. So `$$MY_CLIENT_ID` in `mcp-servers.yaml` becomes `$MY_CLIENT_ID` in the generated config file, which the shell then expands at runtime from the `env` section.
+> **Note on `$$` escaping**: ai-sync's `env_loader.py` treats `$$` as an escape for a literal `$`. So `$$MY_CLIENT_ID` in `mcp-servers/<server-id>/server.yaml` becomes `$MY_CLIENT_ID` in the generated config file, which the shell then expands at runtime from the `env` section.
 
 > **Redirect URI**: `mcp-remote` on port 3335 uses `http://localhost:3335/oauth/callback` as the redirect URI. For **Google "Desktop app" OAuth clients**, any `http://localhost` redirect (any port, any path) is automatically allowed — no pre-registration in the Cloud Console is needed. For **Google "Web application" OAuth clients**, you would need to explicitly register the URI, but Desktop clients handle this transparently by design.
 
@@ -286,15 +284,14 @@ my-server:
 For Gemini, consider using `google_credentials` instead of `mcp-remote` — it avoids the browser flow entirely if the user already has ADC set up:
 
 ```yaml
-# mcp-servers.yaml — Gemini-native approach (not applicable to Codex/Cursor)
-my-google-server:
-  method: http
-  httpUrl: https://my-gcp-service.run.app/mcp
-  oauth:
-    enabled: true
-    # authProviderType not yet a field in ai-sync's OAuthConfig model
-    scopes:
-      - https://www.googleapis.com/auth/cloud-platform
+# mcp-servers/my-google-server/server.yaml — Gemini-native approach
+method: http
+httpUrl: https://my-gcp-service.run.app/mcp
+oauth:
+  enabled: true
+  # authProviderType not yet a field in ai-sync's OAuthConfig model
+  scopes:
+    - https://www.googleapis.com/auth/cloud-platform
 ```
 
 However, since this only works for Gemini, the `mcp-remote` approach remains preferable for consistency across all three clients unless the server is Gemini-only.

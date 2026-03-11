@@ -9,27 +9,28 @@ import yaml
 from pydantic import ValidationError
 
 from .display import Display
-from .helpers import validate_servers_yaml
-from .models import MCPManifest
+from .models import MCPManifest, ServerConfig
 from .project import split_scoped_ref
 from .source_resolver import ResolvedSource
 
 
 def load_manifest(mcp_root: Path, display: Display) -> dict:
-    servers_path = mcp_root / "mcp-servers.yaml"
-    if not servers_path.exists():
+    servers_dir = mcp_root / "mcp-servers"
+    if not servers_dir.exists():
         return {}
+
+    servers: dict[str, dict] = {}
+    for server_dir in sorted(servers_dir.iterdir()):
+        if not server_dir.is_dir():
+            continue
+        config_path = server_dir / "server.yaml"
+        if not config_path.exists():
+            display.print(f"Skipping malformed MCP server directory without server.yaml: {server_dir}", style="warning")
+            continue
+        servers[server_dir.name] = _load_server_config(config_path)
+
     try:
-        with open(servers_path, "r", encoding="utf-8") as f:
-            data = yaml.safe_load(f) or {}
-    except (yaml.YAMLError, OSError) as exc:
-        display.print(f"Failed to load {servers_path}: {exc}", style="warning")
-        return {}
-    errors = validate_servers_yaml(data)
-    for err in errors:
-        display.print(f"mcp-servers.yaml: {err}", style="warning")
-    try:
-        model = MCPManifest.model_validate(data)
+        model = MCPManifest.model_validate({"servers": servers})
     except ValidationError as exc:
         raise RuntimeError(f"Manifest validation failed: {exc}") from exc
     return model.model_dump(by_alias=True)
@@ -56,3 +57,20 @@ def load_and_filter_mcp(
             )
         selected[server_id] = servers[server_id]
     return selected
+
+
+def _load_server_config(path: Path) -> dict:
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = yaml.safe_load(f) or {}
+    except (yaml.YAMLError, OSError) as exc:
+        raise RuntimeError(f"Failed to load {path}: {exc}") from exc
+
+    if not isinstance(data, dict):
+        raise RuntimeError(f"Invalid MCP server config {path}: expected a mapping")
+
+    try:
+        model = ServerConfig.model_validate(data)
+    except ValidationError as exc:
+        raise RuntimeError(f"Invalid MCP server config {path}: {exc}") from exc
+    return model.model_dump(by_alias=True)

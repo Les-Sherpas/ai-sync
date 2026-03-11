@@ -134,9 +134,10 @@ A source repo is a catalog of reusable artifacts:
 ├── skills/
 ├── commands/
 ├── rules/
-├── mcp-servers.yaml
+├── mcp-servers/
+│   └── <server-id>/
+│       └── server.yaml
 ├── requirements.yaml
-├── defaults.yaml
 └── .env.ai-sync.tpl
 ```
 
@@ -146,7 +147,7 @@ A source repo is a catalog of reusable artifacts:
 - Skills come from `skills/<name>/SKILL.md` and are referenced as `<alias>/<name>`.
 - Commands come from `commands/**/<name>.<ext>` and are referenced as `<alias>/<relative-path>`.
 - Rules come from `rules/<name>.md` and are referenced as `<alias>/<name>`.
-- MCP servers come from keys in `mcp-servers.yaml` and are referenced as `<alias>/<server-id>`.
+- MCP servers come from `mcp-servers/<server-id>/server.yaml` and are referenced as `<alias>/<server-id>`.
 
 ## Secrets
 

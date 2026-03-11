@@ -54,9 +54,9 @@ This workspace is a multi-project `ai-sync` working area, not a single git repo.
 
 ## Working In Config Repos
 
-- Source repo artifacts follow the documented layout: `prompts/`, `skills/<name>/SKILL.md`, `commands/`, optional `rules/`, `mcp-servers.yaml`, `requirements.yaml`, and `defaults.yaml`.
+- Source repo artifacts follow the documented layout: `prompts/`, `skills/<name>/SKILL.md`, `commands/`, optional `rules/`, optional `mcp-servers/<server-id>/server.yaml`, optional `requirements.yaml`, and optional `.env.ai-sync.tpl`.
 - Keep artifact identifiers stable unless a rename is explicitly requested.
-- When adding a new artifact, update related metadata, defaults, and docs when needed.
+- Prompt metadata is optional and only supports fields that current runtime consumes: `slug`, `name`, and `description`.
 - Keep secrets as references in `.env.ai-sync.tpl`; never replace them with plaintext credentials.
 
 ## Safety And Scope

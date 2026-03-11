@@ -23,8 +23,9 @@ def _write_project(tmp_path: Path) -> tuple[Path, Path]:
     (source_root / "rules").mkdir(parents=True)
     (source_root / "rules" / "commit.md").write_text("Commit rules\n", encoding="utf-8")
     (source_root / ".env.ai-sync.tpl").write_text("TOKEN=abc\n", encoding="utf-8")
-    (source_root / "mcp-servers.yaml").write_text(
-        'servers:\n  context7:\n    method: stdio\n    command: npx\n    env:\n      TOKEN: "$TOKEN"\n',
+    (source_root / "mcp-servers" / "context7").mkdir(parents=True)
+    (source_root / "mcp-servers" / "context7" / "server.yaml").write_text(
+        'method: stdio\ncommand: npx\nenv:\n  TOKEN: "$TOKEN"\n',
         encoding="utf-8",
     )
 

@@ -54,32 +54,3 @@ def extract_description(content: str) -> str:
         if line.strip() and not line.startswith("#"):
             return line.strip()[:100]
     return "AI Agent"
-
-
-def validate_servers_yaml(data: dict) -> list[str]:
-    errors: list[str] = []
-    if not isinstance(data, dict):
-        return ["mcp-servers.yaml root must be a mapping"]
-    servers = data.get("servers")
-    if servers is not None and not isinstance(servers, dict):
-        errors.append("'servers' must be a mapping")
-        return errors
-    for sid, srv in (servers or {}).items():
-        if not isinstance(srv, dict):
-            errors.append(f"Server '{sid}' must be a mapping")
-            continue
-        if "method" in srv and srv["method"] not in ("stdio", "http", "sse"):
-            errors.append(f"Server '{sid}': invalid method '{srv['method']}' (expected stdio/http/sse)")
-        if "timeout" in srv:
-            errors.append(f"Server '{sid}': 'timeout' is no longer supported; use 'timeout_seconds'")
-        if srv.get("method", "stdio") == "stdio" and not srv.get("command"):
-            errors.append(f"Server '{sid}': stdio server must have a 'command'")
-        if "timeout_seconds" in srv:
-            timeout_seconds = srv.get("timeout_seconds")
-            if not isinstance(timeout_seconds, (int, float)):
-                errors.append(
-                    f"Server '{sid}': 'timeout_seconds' must be a number, got {type(timeout_seconds).__name__}"
-                )
-            elif timeout_seconds < 0:
-                errors.append(f"Server '{sid}': 'timeout_seconds' must be >= 0")
-    return errors
