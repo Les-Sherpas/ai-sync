@@ -17,6 +17,7 @@ import yaml
 
 from .clients.base import Client
 from .display import Display
+from .env_config import RuntimeEnv
 from .git_safety import SENSITIVE_PATHS
 from .helpers import extract_description, to_kebab_case
 from .mcp_sync import resolve_servers_for_client
@@ -47,7 +48,7 @@ def collect_artifacts(
     project_root: Path,
     manifest: ProjectManifest,
     resolved_sources: dict[str, ResolvedSource],
-    runtime_env: dict[str, str],
+    runtime_env: RuntimeEnv,
     mcp_manifest: dict,
     clients: list[Client],
     display: Display,
@@ -353,14 +354,15 @@ def _mcp_artifacts(
 # ---------------------------------------------------------------------------
 
 
-def _env_artifacts(project_root: Path, runtime_env: dict[str, str]) -> list[Artifact]:
-    if not runtime_env:
+def _env_artifacts(project_root: Path, runtime_env: RuntimeEnv) -> list[Artifact]:
+    if not runtime_env.env and not runtime_env.local_vars:
         return []
     env_path = project_root / ".env.ai-sync"
 
     def make_resolve(re=runtime_env, ep=env_path):
         def resolve():
-            lines = [f"{key}={value}" for key, value in sorted(re.items())]
+            all_keys = set(re.env.keys()) | set(re.local_vars.keys())
+            lines = [f"{key}={re.env.get(key, '')}" for key in sorted(all_keys)]
             content = "\n".join(lines) + "\n"
             return [WriteSpec(file_path=ep, format="text", target="ai-sync:env", value=content)]
         return resolve

@@ -8,6 +8,7 @@ from pathlib import Path
 from ai_sync.artifacts import Artifact, collect_artifacts
 from ai_sync.clients import Client, create_clients
 from ai_sync.display import Display
+from ai_sync.env_config import RuntimeEnv
 from ai_sync.git_safety import install_pre_commit_hook
 from ai_sync.project import ProjectManifest
 from ai_sync.source_resolver import ResolvedSource
@@ -22,7 +23,7 @@ def run_apply(
     manifest: ProjectManifest,
     mcp_manifest: dict,
     secrets: dict,
-    runtime_env: dict[str, str],
+    runtime_env: RuntimeEnv,
     resolved_sources: dict[str, ResolvedSource],
     display: Display,
 ) -> int:
@@ -82,7 +83,7 @@ def run_apply(
         if path.exists():
             Client.set_restrictive_permissions(path)
 
-    has_env = bool(runtime_env)
+    has_env = bool(runtime_env.env) or bool(runtime_env.local_vars)
     if has_env:
         installed = install_pre_commit_hook(project_root)
         if installed:

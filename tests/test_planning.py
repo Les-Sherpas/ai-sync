@@ -24,7 +24,7 @@ def _write_project(tmp_path: Path) -> tuple[Path, Path]:
     (source_root / "commands" / "session-summary.md").write_text("Summarize\n", encoding="utf-8")
     (source_root / "rules").mkdir(parents=True)
     (source_root / "rules" / "commit.md").write_text("Commit rules\n", encoding="utf-8")
-    (source_root / ".env.ai-sync.tpl").write_text("TOKEN=abc\n", encoding="utf-8")
+    (source_root / "env.yaml").write_text("TOKEN:\n  value: abc\n", encoding="utf-8")
     (source_root / "mcp-servers" / "context7").mkdir(parents=True)
     (source_root / "mcp-servers" / "context7" / "server.yaml").write_text(
         'method: stdio\ncommand: npx\nenv:\n  TOKEN: "$TOKEN"\n',
@@ -203,6 +203,54 @@ def test_saved_plan_invalidates_when_manifest_changes(tmp_path: Path) -> None:
     current = build_plan_context(project_root, config_root, display)
     with pytest.raises(RuntimeError, match="Saved plan is no longer valid"):
         validate_saved_plan(plan_path, current.plan)
+
+
+def test_local_var_preserved_from_existing_env(tmp_path: Path) -> None:
+    config_root, project_root = _write_project(tmp_path)
+    source_root = tmp_path / "company-source"
+    (source_root / "env.yaml").write_text(
+        "TOKEN:\n  value: abc\nMY_PAT:\n  scope: local\n  description: personal token\n",
+        encoding="utf-8",
+    )
+
+    (project_root / ".env.ai-sync").write_text("MY_PAT=my-secret-value\n", encoding="utf-8")
+
+    display = PlainDisplay()
+    context = build_plan_context(project_root, config_root, display)
+
+    assert context.runtime_env.env["MY_PAT"] == "my-secret-value"
+    assert "MY_PAT" not in context.runtime_env.unfilled_local_vars
+
+
+def test_unfilled_local_var_referenced_by_mcp_raises(tmp_path: Path) -> None:
+    config_root, project_root = _write_project(tmp_path)
+    source_root = tmp_path / "company-source"
+    (source_root / "env.yaml").write_text(
+        "TOKEN:\n  scope: local\n  description: personal token\n",
+        encoding="utf-8",
+    )
+
+    display = PlainDisplay()
+    with pytest.raises(RuntimeError, match="local-scoped.*Set its value"):
+        build_plan_context(project_root, config_root, display)
+
+
+def test_unfilled_local_var_not_referenced_by_mcp_succeeds(tmp_path: Path) -> None:
+    config_root, project_root = _write_project(tmp_path)
+    source_root = tmp_path / "company-source"
+    (source_root / "env.yaml").write_text(
+        "TOKEN:\n  value: abc\nOPTIONAL_PAT:\n  scope: local\n",
+        encoding="utf-8",
+    )
+
+    display = PlainDisplay()
+    context = build_plan_context(project_root, config_root, display)
+
+    assert "OPTIONAL_PAT" in context.runtime_env.unfilled_local_vars
+    assert "OPTIONAL_PAT" in context.runtime_env.local_vars
+
+    env_actions = [a for a in context.plan.actions if a.kind == "env-file"]
+    assert len(env_actions) == 1
 
 
 def test_build_plan_no_collision_with_alias_prefixed_commands(tmp_path: Path) -> None:

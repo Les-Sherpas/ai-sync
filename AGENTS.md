@@ -54,13 +54,21 @@ This workspace is a multi-project `ai-sync` working area, not a single git repo.
 
 ## Working In Config Repos
 
-- Source repo artifacts follow the documented layout: `prompts/`, `skills/<name>/SKILL.md`, `commands/`, optional `rules/`, optional `mcp-servers/<server-id>/server.yaml`, optional `requirements.yaml`, and optional `.env.ai-sync.tpl`.
+- Source repo artifacts follow the documented layout: `prompts/`, `skills/<name>/SKILL.md`, `commands/`, optional `rules/`, optional `mcp-servers/<server-id>/server.yaml`, optional `requirements.yaml`, and optional `env.yaml`.
 - Keep artifact identifiers stable unless a rename is explicitly requested.
 - Prompt metadata is optional and only supports fields that current runtime consumes: `slug`, `name`, and `description`.
-- Keep secrets as references in `.env.ai-sync.tpl`; never replace them with plaintext credentials.
+- Keep secrets as `op://` references in `env.yaml`; never replace them with plaintext credentials. Use `scope: local` for per-developer secrets.
 
 ## Safety And Scope
 
 - Do not manually edit generated or synced client outputs unless the task is specifically about them: `.cursor/*`, `.codex/*`, `.gemini/*`, `.ai-sync/state/`.
 - Prefer minimal diffs and targeted validation over broad refactors.
 - If a task spans multiple subprojects, be explicit about which directory each change belongs to.
+
+<!-- BEGIN ai-sync:rules-index -->
+## ai-sync Rules (managed)
+
+You MUST read and follow ALL rules listed below:
+
+- [commit-conventions](.ai-sync/rules/sherpas-dev-commit-conventions.md)
+<!-- END ai-sync:rules-index -->

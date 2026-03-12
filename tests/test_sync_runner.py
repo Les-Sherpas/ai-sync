@@ -5,6 +5,7 @@ from pathlib import Path
 from ai_sync import sync_runner
 from ai_sync.artifacts import _agent_artifacts, _command_artifacts, _skill_artifacts
 from ai_sync.clients.base import Client
+from ai_sync.env_config import RuntimeEnv
 from ai_sync.project import ProjectManifest, SourceConfig
 from ai_sync.source_resolver import ResolvedSource
 from ai_sync.track_write import WriteSpec
@@ -91,7 +92,7 @@ def _make_repo_root(tmp_path: Path) -> Path:
     (root / "skills" / "skill-one").mkdir(parents=True)
     (root / "commands").mkdir(parents=True)
     (root / "rules").mkdir(parents=True)
-    (root / ".env.ai-sync.tpl").write_text("TOKEN=abc\n", encoding="utf-8")
+    (root / "env.yaml").write_text("TOKEN:\n  value: abc\n", encoding="utf-8")
     (root / "prompts" / "agent.md").write_text("## Task\nDo thing\n", encoding="utf-8")
     (root / "skills" / "skill-one" / "SKILL.md").write_text("# Skill\n", encoding="utf-8")
     (root / "commands" / "shortcut.md").write_text("Do a thing\n", encoding="utf-8")
@@ -137,7 +138,7 @@ def test_run_apply_syncs_agents_and_mcp(monkeypatch, tmp_path: Path) -> None:
         manifest=manifest,
         mcp_manifest=mcp_manifest,
         secrets={},
-        runtime_env={},
+        runtime_env=RuntimeEnv(),
         resolved_sources=resolved_sources,
         display=display,
     )
@@ -174,7 +175,7 @@ def test_run_apply_writes_rules_and_index(monkeypatch, tmp_path: Path) -> None:
         manifest=manifest,
         mcp_manifest={},
         secrets={},
-        runtime_env={},
+        runtime_env=RuntimeEnv(),
         resolved_sources=resolved_sources,
         display=display,
     )
@@ -212,7 +213,7 @@ def test_run_apply_removes_stale_rules(monkeypatch, tmp_path: Path) -> None:
         manifest=manifest_with,
         mcp_manifest={},
         secrets={},
-        runtime_env={},
+        runtime_env=RuntimeEnv(),
         resolved_sources=resolved_sources,
         display=display,
     )
@@ -226,7 +227,7 @@ def test_run_apply_removes_stale_rules(monkeypatch, tmp_path: Path) -> None:
         manifest=manifest_empty,
         mcp_manifest={},
         secrets={},
-        runtime_env={},
+        runtime_env=RuntimeEnv(),
         resolved_sources=resolved_sources,
         display=display,
     )

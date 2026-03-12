@@ -42,12 +42,14 @@ node_modules/
 .vscode/
 .DS_Store
 
-# ai-sync managed entries
-.ai-sync.local.yaml
+# BEGIN ai-sync:gitignore
 .cursor/*
 .codex/*
 .gemini/*
 .ai-sync/sources/
 .ai-sync/state/
+.ai-sync/rules/
 .ai-sync/last-plan.yaml
+.ai-sync.local.yaml
 .env.ai-sync
+# END ai-sync:gitignore

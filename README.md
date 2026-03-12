@@ -148,7 +148,7 @@ A source repo is a catalog of reusable artifacts:
 │   └── <server-id>/
 │       └── server.yaml
 ├── requirements.yaml
-└── .env.ai-sync.tpl
+└── env.yaml
 ```
 
 ### Resource ids
@@ -163,12 +163,18 @@ A source repo is a catalog of reusable artifacts:
 
 Secrets stay as references in source repos and project config. `ai-sync` resolves them locally and can generate a project-local `.env.ai-sync` file when needed.
 
-Example `.env.ai-sync.tpl`:
+Example `env.yaml`:
 
-```text
-CONTEXT7_API_KEY=op://Example Vault/AI Tools/CONTEXT7_API_KEY
-EXA_API_KEY=op://Example Vault/AI Tools/EXA_API_KEY
-PUBLIC_CLIENT_ID=abc123
+```yaml
+CONTEXT7_API_KEY:
+  value: op://Example Vault/AI Tools/CONTEXT7_API_KEY
+EXA_API_KEY:
+  value: op://Example Vault/AI Tools/EXA_API_KEY
+PUBLIC_CLIENT_ID:
+  value: abc123
+GITHUB_PAT:
+  scope: local
+  description: Personal GitHub PAT
 ```
 
 Rules:

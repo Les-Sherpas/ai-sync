@@ -93,26 +93,6 @@ def _resolve_cli_env(config_root: Path | None) -> dict[str, str]:
         "1Password auth required. Run `ai-sync install` or set OP_SERVICE_ACCOUNT_TOKEN/OP_ACCOUNT."
     )
 
-
-def _load_runtime_env_with_cli(env_template_path: Path, config_root: Path | None) -> dict[str, str]:
-    env = os.environ.copy()
-    env.update(_resolve_cli_env(config_root))
-    try:
-        result = subprocess.run(
-            ["op", "inject", "--in-file", str(env_template_path)],
-            check=True,
-            capture_output=True,
-            text=True,
-            env=env,
-        )
-    except FileNotFoundError as exc:
-        raise RuntimeError("1Password CLI is not installed or `op` is not on PATH.") from exc
-    except subprocess.CalledProcessError as exc:
-        msg = exc.stderr or exc.stdout or str(exc)
-        raise RuntimeError(_format_cli_error(msg)) from exc
-    return parse_injected_env(result.stdout)
-
-
 def _resolve_auth(config_root: Path | None) -> str | DesktopAuth:
     token = os.getenv("OP_SERVICE_ACCOUNT_TOKEN")
     account = os.getenv("OP_ACCOUNT") or resolve_op_account_identifier(config_root)
@@ -125,53 +105,70 @@ def _resolve_auth(config_root: Path | None) -> str | DesktopAuth:
     )
 
 
-async def _load_runtime_env_async(env_template_path: Path, config_root: Path | None) -> dict[str, str]:
-    content = env_template_path.read_text(encoding="utf-8")
-    lines = content.splitlines()
+def resolve_op_refs(values: dict[str, str], config_root: Path | None = None) -> dict[str, str]:
+    """Resolve a pre-parsed {name: value_or_op_ref} dict.
+
+    Plain values are returned as-is.  ``op://`` references are resolved
+    via the 1Password CLI (preferred) or SDK (fallback).
+    """
+    op_entries = {k: v for k, v in values.items() if v.startswith(OP_REF_PREFIX)}
+    plain_entries = {k: v for k, v in values.items() if not v.startswith(OP_REF_PREFIX)}
+
+    if not op_entries:
+        return dict(values)
+
+    lines = [f"{name}={ref}" for name, ref in op_entries.items()]
+    content = "\n".join(lines)
     refs, line_to_ref = _extract_op_refs(lines)
-    if not refs:
-        return parse_injected_env(content)
-
-    auth = _resolve_auth(config_root)
-
-    client = await Client.authenticate(
-        auth=auth,
-        integration_name="ai-sync",
-        integration_version="0.1.0",
-    )
-    response = await client.secrets.resolve_all(refs)
-
-    resolved: dict[str, str] = {}
-    for ref, resp in response.individual_responses.items():
-        if resp.error is not None:
-            msg = str(resp.error)
-            raise RuntimeError(f"Failed to resolve {ref}: {msg}")
-        if resp.content:
-            resolved[ref] = resp.content.secret
-
-    injected = _inject_resolved(lines, line_to_ref, resolved)
-    return parse_injected_env(injected)
-
-
-def load_runtime_env_from_op(env_template_path: Path, config_root: Path | None = None) -> dict[str, str]:
-    if not env_template_path.exists():
-        return {}
-    content = env_template_path.read_text(encoding="utf-8")
-    refs, _line_to_ref = _extract_op_refs(content.splitlines())
-    if not refs:
-        return parse_injected_env(content)
 
     cli_error: Exception | None = None
     try:
-        return _load_runtime_env_with_cli(env_template_path, config_root)
+        env = os.environ.copy()
+        env.update(_resolve_cli_env(config_root))
+        result = subprocess.run(
+            ["op", "inject"],
+            input=content,
+            check=True,
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        resolved_op = parse_injected_env(result.stdout)
+        return {**plain_entries, **resolved_op}
     except Exception as exc:
         cli_error = exc
 
     try:
-        return asyncio.run(_load_runtime_env_async(env_template_path, config_root))
+        resolved_op = asyncio.run(
+            _resolve_op_refs_async(refs, lines, line_to_ref, config_root)
+        )
+        return {**plain_entries, **resolved_op}
     except Exception as sdk_error:
         raise RuntimeError(
             "Failed to resolve 1Password references.\n"
             f"CLI: {cli_error}\n"
             f"SDK: {sdk_error}"
         ) from sdk_error
+
+
+async def _resolve_op_refs_async(
+    refs: list[str],
+    lines: list[str],
+    line_to_ref: dict[int, str],
+    config_root: Path | None,
+) -> dict[str, str]:
+    auth = _resolve_auth(config_root)
+    client = await Client.authenticate(
+        auth=auth,
+        integration_name="ai-sync",
+        integration_version="0.1.0",
+    )
+    response = await client.secrets.resolve_all(refs)
+    resolved: dict[str, str] = {}
+    for ref, resp in response.individual_responses.items():
+        if resp.error is not None:
+            raise RuntimeError(f"Failed to resolve {ref}: {resp.error}")
+        if resp.content:
+            resolved[ref] = resp.content.secret
+    injected = _inject_resolved(lines, line_to_ref, resolved)
+    return parse_injected_env(injected)

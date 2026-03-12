@@ -13,11 +13,12 @@ from pydantic import BaseModel, Field
 from .artifacts import Artifact, collect_artifacts
 from .clients import create_clients
 from .display import Display
+from .env_config import EnvVarConfig, RuntimeEnv, load_env_config, read_existing_env_file
 from .env_loader import collect_env_refs, resolve_env_refs_in_obj
 from .git_safety import check_pre_commit_hook
 from .helpers import validate_client_settings
 from .manifest_loader import load_and_filter_mcp
-from .op_inject import load_runtime_env_from_op
+from .op_inject import resolve_op_refs
 from .project import (
     ProjectManifest,
     manifest_fingerprint,
@@ -80,7 +81,7 @@ class PlanContext:
     manifest: ProjectManifest
     resolved_sources: dict[str, ResolvedSource]
     mcp_manifest: dict
-    runtime_env: dict[str, str]
+    runtime_env: RuntimeEnv
     secrets: dict
 
 
@@ -119,15 +120,29 @@ def build_plan_context(project_root: Path, config_root: Path | None, display: Di
         if not result.ok and result.error:
             display.print(f"Warning: {result.error}", style="warning")
 
-    runtime_env = _load_runtime_env(resolved_sources, config_root)
+    runtime_env = _load_runtime_env(project_root, resolved_sources, config_root)
     required_vars = collect_env_refs(mcp_manifest)
-    missing = sorted(required_vars - runtime_env.keys())
+    missing = sorted(required_vars - runtime_env.env.keys())
     if missing:
-        raise RuntimeError(
-            "MCP config references env vars not defined in any selected source template: " + ", ".join(missing)
-        )
+        unfilled_local = [v for v in missing if v in runtime_env.unfilled_local_vars]
+        undeclared = [v for v in missing if v not in runtime_env.unfilled_local_vars]
+        parts: list[str] = []
+        if unfilled_local:
+            for name in unfilled_local:
+                cfg = runtime_env.local_vars.get(name)
+                hint = f" ({cfg.description})" if cfg and cfg.description else ""
+                parts.append(
+                    f"{name}{hint} is local-scoped. "
+                    f"Set its value in {project_root / '.env.ai-sync'} and re-run."
+                )
+        if undeclared:
+            parts.append(
+                "MCP config references env vars not defined in any selected source env.yaml: "
+                + ", ".join(undeclared)
+            )
+        raise RuntimeError("\n".join(parts))
     if required_vars:
-        resolved_mcp_manifest = resolve_env_refs_in_obj(mcp_manifest, runtime_env)
+        resolved_mcp_manifest = resolve_env_refs_in_obj(mcp_manifest, runtime_env.env)
         if not isinstance(resolved_mcp_manifest, dict):
             raise RuntimeError("Resolved MCP manifest must remain a mapping.")
         mcp_manifest = resolved_mcp_manifest
@@ -306,7 +321,7 @@ def _build_plan(
     manifest: ProjectManifest,
     manifest_hash: str,
     resolved_sources: dict[str, ResolvedSource],
-    runtime_env: dict[str, str],
+    runtime_env: RuntimeEnv,
     mcp_manifest: dict,
     display: Display,
 ) -> ApplyPlan:
@@ -368,7 +383,9 @@ def _build_plan(
     stale_actions = _build_stale_plan_actions(store, desired_targets)
     actions.extend(stale_actions)
 
-    git_safety_actions = _build_git_safety_actions(project_root, bool(runtime_env))
+    git_safety_actions = _build_git_safety_actions(
+        project_root, bool(runtime_env.env) or bool(runtime_env.local_vars)
+    )
     actions.extend(git_safety_actions)
 
     selections = {
@@ -445,20 +462,60 @@ def _build_git_safety_actions(project_root: Path, has_env: bool) -> list[PlanAct
     return actions
 
 
-def _load_runtime_env(resolved_sources: dict[str, ResolvedSource], config_root: Path | None) -> dict[str, str]:
-    runtime_env: dict[str, str] = {}
+def _load_runtime_env(
+    project_root: Path,
+    resolved_sources: dict[str, ResolvedSource],
+    config_root: Path | None,
+) -> RuntimeEnv:
+    existing_env = read_existing_env_file(project_root)
+
+    env: dict[str, str] = {}
+    all_local_vars: dict[str, EnvVarConfig] = {}
     owners: dict[str, str] = {}
+    scopes: dict[str, str] = {}
+
     for alias in sorted(resolved_sources):
-        tpl = resolved_sources[alias].root / ".env.ai-sync.tpl"
-        if not tpl.exists():
+        env_yaml = resolved_sources[alias].root / "env.yaml"
+        if not env_yaml.exists():
             continue
-        env_values = load_runtime_env_from_op(tpl, config_root)
-        for key, value in env_values.items():
-            if key in runtime_env and runtime_env[key] != value:
-                owner = owners.get(key, "<unknown>")
-                raise RuntimeError(
-                    f"Environment variable collision for {key!r} across selected sources: {owner!r} and {alias!r}."
-                )
-            runtime_env[key] = value
-            owners[key] = alias
-    return runtime_env
+
+        config = load_env_config(env_yaml)
+        global_values: dict[str, str] = {}
+
+        for name, var_cfg in config.items():
+            if name in owners:
+                prev_alias = owners[name]
+                prev_scope = scopes[name]
+                if prev_scope != var_cfg.scope:
+                    raise RuntimeError(
+                        f"Environment variable scope conflict for {name!r}: "
+                        f"{prev_alias!r} declares it as {prev_scope!r}, "
+                        f"{alias!r} declares it as {var_cfg.scope!r}."
+                    )
+                if var_cfg.scope == "global":
+                    assert var_cfg.value is not None
+                    if env.get(name) != var_cfg.value:
+                        raise RuntimeError(
+                            f"Environment variable collision for {name!r} "
+                            f"across selected sources: {prev_alias!r} and {alias!r}."
+                        )
+                continue
+
+            owners[name] = alias
+            scopes[name] = var_cfg.scope
+
+            if var_cfg.scope == "local":
+                all_local_vars[name] = var_cfg
+                if name in existing_env and existing_env[name]:
+                    env[name] = existing_env[name]
+            else:
+                assert var_cfg.value is not None
+                global_values[name] = var_cfg.value
+
+        if global_values:
+            resolved = resolve_op_refs(global_values, config_root)
+            env.update(resolved)
+
+    unfilled = {name for name in all_local_vars if name not in env}
+
+    return RuntimeEnv(env=env, local_vars=all_local_vars, unfilled_local_vars=unfilled)
