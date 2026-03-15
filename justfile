@@ -10,7 +10,11 @@ install:
     {{venv}}/pre-commit install --hook-type pre-commit
 
 build-ui:
-    cd ui && npm install && npm run build
+    cd ui && npm ci && npm run build
+
+verify-embedded-ui:
+    just build-ui
+    git diff --quiet -- src/ai_sync/web/static ui/package-lock.json || { echo "Embedded UI assets are stale. Run \`just build-ui\` and commit the changes before releasing." >&2; git diff -- src/ai_sync/web/static ui/package-lock.json; exit 1; }
 
 ui-dev:
     @printf '%s\n' \
@@ -50,6 +54,7 @@ fix:
 
 release version:
     ./scripts/release_checks.sh {{version}}
+    just verify-embedded-ui
     poetry lock
     poetry version {{version}}
     just install

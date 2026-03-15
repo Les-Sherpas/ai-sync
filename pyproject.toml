@@ -23,9 +23,9 @@ classifiers = [
 ]
 packages = [{ include = "ai_sync", from = "src" }]
 include = [
-    "LICENSE",
-    "src/ai_sync/.client-versions.json",
-    "src/ai_sync/web/static/**/*",
+    { path = "LICENSE", format = ["sdist", "wheel"] },
+    { path = "src/ai_sync/.client-versions.json", format = ["sdist", "wheel"] },
+    { path = "src/ai_sync/web/static/**/*", format = ["sdist", "wheel"] },
 ]
 
 [tool.poetry.urls]

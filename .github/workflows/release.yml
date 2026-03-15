@@ -48,11 +48,21 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+      - name: Install just
+        uses: taiki-e/install-action@just
       - name: Setup Poetry
         uses: ./.github/actions/setup-poetry
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           poetry-version: ${{ env.POETRY_VERSION }}
+      - name: Verify embedded UI
+        run: just verify-embedded-ui
       - name: Build
         run: |
           poetry build
