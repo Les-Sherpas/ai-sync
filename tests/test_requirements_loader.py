@@ -4,9 +4,10 @@ from pathlib import Path
 
 import pytest
 
-from ai_sync.display import PlainDisplay
-from ai_sync.requirements_loader import load_and_filter_requirements
-from ai_sync.source_resolver import ResolvedSource
+from ai_sync.data_classes.resolved_source import ResolvedSource
+from ai_sync.services.plain_display_service import PlainDisplayService
+from ai_sync.services.tool_requirement_service import ToolRequirementService
+from ai_sync.services.tool_version_service import ToolVersionService
 
 
 def _source(alias: str, root: Path) -> ResolvedSource:
@@ -18,7 +19,8 @@ def _write_requirements(repo_root: Path, content: str) -> None:
 
 
 def test_merge_requirements_same_name_and_version_unions_servers(tmp_path: Path) -> None:
-    display = PlainDisplay()
+    service = ToolRequirementService(version_check_service=ToolVersionService())
+    display = PlainDisplayService()
 
     primary = tmp_path / "primary"
     primary.mkdir()
@@ -46,7 +48,7 @@ def test_merge_requirements_same_name_and_version_unions_servers(tmp_path: Path)
         ),
     )
 
-    selected = load_and_filter_requirements(
+    selected = service.load_and_filter_requirements(
         {"primary": _source("primary", primary), "secondary": _source("secondary", secondary)},
         ["primary/context7", "secondary/slack"],
         display,
@@ -59,7 +61,8 @@ def test_merge_requirements_same_name_and_version_unions_servers(tmp_path: Path)
 
 
 def test_merge_requirements_same_name_with_different_versions_raises(tmp_path: Path) -> None:
-    display = PlainDisplay()
+    service = ToolRequirementService(version_check_service=ToolVersionService())
+    display = PlainDisplayService()
 
     a = tmp_path / "a"
     a.mkdir()
@@ -88,7 +91,7 @@ def test_merge_requirements_same_name_with_different_versions_raises(tmp_path: P
     )
 
     with pytest.raises(RuntimeError, match="Requirement collision"):
-        load_and_filter_requirements(
+        service.load_and_filter_requirements(
             {"a": _source("a", a), "b": _source("b", b)},
             ["a/context7", "b/slack"],
             display,

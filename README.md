@@ -274,8 +274,23 @@ ai-sync doctor
 ai-sync uninstall [--apply]
 ```
 
+## Architecture
+
+Runtime orchestration is class-based and dependency-injected:
+
+- The composition root lives in `ai_sync.di`, with providers declared in `AppContainer`.
+- The only runtime entrypoint is `cli.main()`, which calls `bootstrap_runtime()` to resolve `CommandHandlersService`.
+- Command flows (`install`, `plan`, `apply`, `doctor`, `uninstall`) are implemented on service classes under `ai_sync.services`.
+- Adapter boundaries (`filesystem`, `process runner`) isolate side effects from orchestration logic.
+
 ## Testing
 
 ```bash
 python -m pytest tests
 ```
+
+DI-heavy tests should prefer provider overrides over module monkeypatching:
+
+- Build a fresh container via `create_container()`.
+- Override collaborators with `container.override_providers(...)`.
+- Resolve the service under test from the container after overrides are applied.

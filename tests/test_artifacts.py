@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from ai_sync.artifacts import _load_artifact_yaml
+from ai_sync.services.artifact_service import _load_artifact_yaml
 
 
 def test_load_artifact_yaml_reads_sibling_prompt_file(tmp_path: Path) -> None:

@@ -5,18 +5,13 @@ from pathlib import Path
 import pytest
 import yaml
 
-from ai_sync.project import (
-    ProjectManifest,
-    SourceConfig,
-    find_project_root,
-    manifest_fingerprint,
-    resolve_project_manifest,
-    resolve_project_manifest_path,
-    split_scoped_ref,
-)
+from ai_sync.models import ProjectManifest, SourceConfig, split_scoped_ref
+from ai_sync.services.project_locator_service import ProjectLocatorService
+from ai_sync.services.project_manifest_service import ProjectManifestService
 
 
 def test_project_manifest_from_yaml(tmp_path: Path) -> None:
+    service = ProjectManifestService()
     data = {
         "sources": {
             "company": {"source": "github.com/acme/company-ai-sync", "version": "v1.2.0"},
@@ -30,7 +25,7 @@ def test_project_manifest_from_yaml(tmp_path: Path) -> None:
     }
     (tmp_path / ".ai-sync.yaml").write_text(yaml.safe_dump(data), encoding="utf-8")
 
-    manifest = resolve_project_manifest(tmp_path)
+    manifest = service.resolve_project_manifest(tmp_path)
     assert sorted(manifest.sources) == ["company", "frontend"]
     assert manifest.agents == ["company/agent-a"]
     assert manifest.skills == ["frontend/skill-a"]
@@ -40,6 +35,7 @@ def test_project_manifest_from_yaml(tmp_path: Path) -> None:
 
 
 def test_project_manifest_local_yaml_supersedes_default(tmp_path: Path) -> None:
+    service = ProjectManifestService()
     (tmp_path / ".ai-sync.yaml").write_text("agents:\n  - missing/agent\n", encoding="utf-8")
     (tmp_path / ".ai-sync.local.yaml").write_text(
         yaml.safe_dump(
@@ -51,8 +47,8 @@ def test_project_manifest_local_yaml_supersedes_default(tmp_path: Path) -> None:
         encoding="utf-8",
     )
 
-    assert resolve_project_manifest_path(tmp_path) == tmp_path / ".ai-sync.local.yaml"
-    manifest = resolve_project_manifest(tmp_path)
+    assert service.resolve_project_manifest_path(tmp_path) == tmp_path / ".ai-sync.local.yaml"
+    manifest = service.resolve_project_manifest(tmp_path)
     assert sorted(manifest.sources) == ["company"]
     assert manifest.agents == ["company/agent-a"]
 
@@ -90,37 +86,40 @@ def test_split_scoped_ref_rejects_invalid_values() -> None:
 
 
 def test_find_project_root_walks_up(tmp_path: Path) -> None:
+    service = ProjectLocatorService()
     project = tmp_path / "code" / "myproject"
     project.mkdir(parents=True)
     (project / ".ai-sync.yaml").write_text("sources: {}\n", encoding="utf-8")
     subdir = project / "src" / "deep"
     subdir.mkdir(parents=True)
 
-    assert find_project_root(subdir) == project
+    assert service.find_project_root(subdir) == project
 
 
 def test_find_project_root_walks_up_with_local_manifest(tmp_path: Path) -> None:
+    service = ProjectLocatorService()
     project = tmp_path / "code" / "myproject"
     project.mkdir(parents=True)
     (project / ".ai-sync.local.yaml").write_text("sources: {}\n", encoding="utf-8")
     subdir = project / "src" / "deep"
     subdir.mkdir(parents=True)
 
-    assert find_project_root(subdir) == project
+    assert service.find_project_root(subdir) == project
 
 
 def test_find_project_root_returns_none(tmp_path: Path) -> None:
-    assert find_project_root(tmp_path) is None
+    assert ProjectLocatorService().find_project_root(tmp_path) is None
 
 
 def test_manifest_fingerprint_changes_with_content(tmp_path: Path) -> None:
+    service = ProjectManifestService()
     manifest_path = tmp_path / ".ai-sync.yaml"
     manifest_path.write_text("sources: {}\n", encoding="utf-8")
-    first = manifest_fingerprint(manifest_path)
+    first = service.manifest_fingerprint(manifest_path)
     manifest_path.write_text("sources:\n  company:\n    source: ../company\n", encoding="utf-8")
-    assert manifest_fingerprint(manifest_path) != first
+    assert service.manifest_fingerprint(manifest_path) != first
 
 
 def test_no_project_manifest_raises(tmp_path: Path) -> None:
     with pytest.raises(RuntimeError, match=r"No \.ai-sync\.local\.yaml or \.ai-sync\.yaml found"):
-        resolve_project_manifest(tmp_path)
+        ProjectManifestService().resolve_project_manifest(tmp_path)

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ai_sync.track_write import WriteSpec
+from ai_sync.data_classes.write_spec import WriteSpec
 
 from .base import Client
 
@@ -23,7 +23,10 @@ class CodexClient(Client):
         prefixed_slug = f"{alias}-{slug}"
         agent_dir = self.get_agents_dir() / prefixed_slug
         codex_prompt_path = agent_dir / "prompt.md"
-        return [
+        config_path = self.config_dir / "config.toml"
+        agent_config_rel = str((agent_dir / "config.toml").relative_to(self.config_dir))
+
+        specs = [
             WriteSpec(
                 file_path=codex_prompt_path,
                 format="text",
@@ -54,7 +57,25 @@ class CodexClient(Client):
                 target="/web_search",
                 value="live" if meta.get("web_search", True) else "off",
             ),
+            WriteSpec(
+                file_path=config_path,
+                format="toml",
+                target=f"/agents/{prefixed_slug}/config_file",
+                value=agent_config_rel,
+            ),
         ]
+
+        if meta.get("description"):
+            specs.append(
+                WriteSpec(
+                    file_path=config_path,
+                    format="toml",
+                    target=f"/agents/{prefixed_slug}/description",
+                    value=str(meta["description"]),
+                )
+            )
+
+        return specs
 
     def build_command_specs(
         self, alias: str, slug: str, meta: dict, raw_content: str, command_name: str

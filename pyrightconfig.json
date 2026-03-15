@@ -2,6 +2,8 @@
   "include": ["src/ai_sync", "tests"],
   "typeCheckingMode": "basic",
   "pythonVersion": "3.11",
+  "venvPath": ".",
+  "venv": ".venv",
   "reportMissingImports": true,
   "reportMissingTypeStubs": false
 }

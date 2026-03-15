@@ -2,16 +2,14 @@
 
 from __future__ import annotations
 
-import json
 import os
 import stat
 from abc import ABC, abstractmethod
 from pathlib import Path
 
-import tomli
 import tomli_w
 
-from ai_sync.track_write import WriteSpec
+from ai_sync.data_classes.write_spec import WriteSpec
 
 
 class Client(ABC):
@@ -31,30 +29,6 @@ class Client(ABC):
 
     def get_skills_dir(self) -> Path:
         return self.config_dir / "skills"
-
-    @staticmethod
-    def _read_json_config(path: Path) -> dict:
-        if not path.exists():
-            return {}
-        try:
-            with open(path, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except (json.JSONDecodeError, OSError):
-            return {}
-
-    @staticmethod
-    def _read_toml_config(path: Path) -> dict:
-        if not path.exists():
-            return {}
-        try:
-            with open(path, "rb") as f:
-                return tomli.load(f)
-        except (OSError, tomli.TOMLDecodeError):
-            return {}
-
-    @staticmethod
-    def _write_json_config(data: dict) -> str:
-        return json.dumps(data, indent=2)
 
     @staticmethod
     def _write_toml_config(data: dict) -> str:

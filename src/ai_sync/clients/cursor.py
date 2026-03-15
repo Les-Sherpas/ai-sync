@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
-from ai_sync.track_write import WriteSpec
+from ai_sync.data_classes.write_spec import WriteSpec
 
 from .base import Client
 
@@ -24,8 +23,8 @@ class CursorClient(Client):
         prefixed_slug = f"{alias}-{slug}"
         agent_path = self.get_agents_dir() / f"{prefixed_slug}.md"
         content = f"""---
-name: {json.dumps(meta.get("name", slug))}
-description: {json.dumps(meta.get("description", "AI Agent"))}
+name: {meta.get("name", slug)}
+description: {meta.get("description", "AI Agent")}
 model: auto
 is_background: {"true" if meta.get("is_background", False) else "false"}
 ---

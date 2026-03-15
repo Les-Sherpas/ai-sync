@@ -4,10 +4,12 @@ from pathlib import Path
 
 import pytest
 
-from ai_sync.display import PlainDisplay
-from ai_sync.planning import build_plan_context, default_plan_path, save_plan, validate_saved_plan
-from ai_sync.project import manifest_fingerprint
-from ai_sync.sync_runner import run_apply
+from ai_sync.di import create_container
+from ai_sync.services.plan_persistence_service import PlanPersistenceService
+from ai_sync.services.plain_display_service import PlainDisplayService
+from ai_sync.services.project_manifest_service import ProjectManifestService
+
+PLAN_PERSISTENCE = PlanPersistenceService()
 
 
 def _write_project(tmp_path: Path) -> tuple[Path, Path]:
@@ -82,22 +84,24 @@ def _write_project(tmp_path: Path) -> tuple[Path, Path]:
 
 
 def _run_apply_from_context(context, project_root, display):
-    return run_apply(
+    container = create_container()
+    return container.apply_service().run_apply(
         project_root=project_root,
-        source_roots={alias: source.root for alias, source in context.resolved_sources.items()},
-        manifest=context.manifest,
-        mcp_manifest=context.mcp_manifest,
-        secrets=context.secrets,
+        resolved_artifacts=context.resolved_artifacts,
         runtime_env=context.runtime_env,
-        resolved_sources=context.resolved_sources,
         display=display,
     )
 
 
+def _build_plan_context(project_root: Path, config_root: Path, display: PlainDisplayService):
+    container = create_container()
+    return container.plan_service().assemble_plan_context(project_root, config_root, display)
+
+
 def test_build_plan_context_marks_secret_backed_outputs(tmp_path: Path) -> None:
     config_root, project_root = _write_project(tmp_path)
-    display = PlainDisplay()
-    context = build_plan_context(project_root, config_root, display)
+    display = PlainDisplayService()
+    context = _build_plan_context(project_root, config_root, display)
     secret_targets = {action.target for action in context.plan.actions if action.secret_backed}
     assert str(project_root / ".env.ai-sync") in secret_targets
 
@@ -107,18 +111,20 @@ def test_build_plan_context_prefers_local_manifest(tmp_path: Path) -> None:
     local_manifest_path = project_root / ".ai-sync.local.yaml"
     local_manifest_path.write_text("sources: {}\n", encoding="utf-8")
 
-    display = PlainDisplay()
-    context = build_plan_context(project_root, config_root, display)
+    display = PlainDisplayService()
+    context = _build_plan_context(project_root, config_root, display)
 
     assert context.manifest.agents == []
     assert context.plan.manifest_path == str(local_manifest_path)
-    assert context.plan.manifest_fingerprint == manifest_fingerprint(local_manifest_path)
+    assert context.plan.manifest_fingerprint == ProjectManifestService().manifest_fingerprint(
+        local_manifest_path
+    )
 
 
 def test_build_plan_context_targets_rule_files(tmp_path: Path) -> None:
     config_root, project_root = _write_project(tmp_path)
-    display = PlainDisplay()
-    context = build_plan_context(project_root, config_root, display)
+    display = PlainDisplayService()
+    context = _build_plan_context(project_root, config_root, display)
 
     rule_targets = {action.target for action in context.plan.actions if action.kind == "rule"}
     assert rule_targets == {
@@ -132,19 +138,19 @@ def test_build_plan_context_targets_rule_files(tmp_path: Path) -> None:
 
 def test_build_plan_context_hides_unchanged_managed_outputs(tmp_path: Path) -> None:
     config_root, project_root = _write_project(tmp_path)
-    display = PlainDisplay()
-    context = build_plan_context(project_root, config_root, display)
+    display = PlainDisplayService()
+    context = _build_plan_context(project_root, config_root, display)
 
     assert _run_apply_from_context(context, project_root, display) == 0
 
-    current = build_plan_context(project_root, config_root, display)
+    current = _build_plan_context(project_root, config_root, display)
     assert current.plan.actions == []
 
 
 def test_build_plan_context_only_shows_changed_rule_outputs(tmp_path: Path) -> None:
     config_root, project_root = _write_project(tmp_path)
-    display = PlainDisplay()
-    context = build_plan_context(project_root, config_root, display)
+    display = PlainDisplayService()
+    context = _build_plan_context(project_root, config_root, display)
 
     assert _run_apply_from_context(context, project_root, display) == 0
 
@@ -156,7 +162,7 @@ def test_build_plan_context_only_shows_changed_rule_outputs(tmp_path: Path) -> N
     )
     rule_path.with_name("prompt.md").write_text("Updated commit rules\n", encoding="utf-8")
 
-    current = build_plan_context(project_root, config_root, display)
+    current = _build_plan_context(project_root, config_root, display)
     assert {action.kind for action in current.plan.actions} == {"rule"}
     assert {action.target for action in current.plan.actions} == {
         str(project_root / ".ai-sync" / "rules" / "company-commit.md"),
@@ -166,8 +172,8 @@ def test_build_plan_context_only_shows_changed_rule_outputs(tmp_path: Path) -> N
 
 def test_apply_writes_claude_rule_with_frontmatter_from_metadata(tmp_path: Path) -> None:
     config_root, project_root = _write_project(tmp_path)
-    display = PlainDisplay()
-    context = build_plan_context(project_root, config_root, display)
+    display = PlainDisplayService()
+    context = _build_plan_context(project_root, config_root, display)
 
     assert _run_apply_from_context(context, project_root, display) == 0
 
@@ -184,8 +190,8 @@ def test_apply_writes_claude_rule_with_frontmatter_from_metadata(tmp_path: Path)
 
 def test_build_plan_context_and_apply_show_and_execute_delete_for_removed_command(tmp_path: Path) -> None:
     config_root, project_root = _write_project(tmp_path)
-    display = PlainDisplay()
-    context = build_plan_context(project_root, config_root, display)
+    display = PlainDisplayService()
+    context = _build_plan_context(project_root, config_root, display)
 
     assert _run_apply_from_context(context, project_root, display) == 0
 
@@ -213,7 +219,7 @@ def test_build_plan_context_and_apply_show_and_execute_delete_for_removed_comman
         encoding="utf-8",
     )
 
-    current = build_plan_context(project_root, config_root, display)
+    current = _build_plan_context(project_root, config_root, display)
     delete_actions = [action for action in current.plan.actions if action.action == "delete"]
     assert any(action.kind == "command" for action in delete_actions)
 
@@ -224,22 +230,22 @@ def test_build_plan_context_and_apply_show_and_execute_delete_for_removed_comman
 
 def test_saved_plan_validates_against_current_inputs(tmp_path: Path) -> None:
     config_root, project_root = _write_project(tmp_path)
-    display = PlainDisplay()
-    context = build_plan_context(project_root, config_root, display)
-    plan_path = default_plan_path(project_root)
-    save_plan(context.plan, plan_path)
+    display = PlainDisplayService()
+    context = _build_plan_context(project_root, config_root, display)
+    plan_path = PLAN_PERSISTENCE.default_plan_path(project_root)
+    PLAN_PERSISTENCE.save_plan(context.plan, plan_path)
 
-    current = build_plan_context(project_root, config_root, display)
-    saved = validate_saved_plan(plan_path, current.plan)
+    current = _build_plan_context(project_root, config_root, display)
+    saved = PLAN_PERSISTENCE.validate_saved_plan(plan_path, current.plan)
     assert saved.manifest_fingerprint == current.plan.manifest_fingerprint
 
 
 def test_saved_plan_invalidates_when_manifest_changes(tmp_path: Path) -> None:
     config_root, project_root = _write_project(tmp_path)
-    display = PlainDisplay()
-    context = build_plan_context(project_root, config_root, display)
-    plan_path = default_plan_path(project_root)
-    save_plan(context.plan, plan_path)
+    display = PlainDisplayService()
+    context = _build_plan_context(project_root, config_root, display)
+    plan_path = PLAN_PERSISTENCE.default_plan_path(project_root)
+    PLAN_PERSISTENCE.save_plan(context.plan, plan_path)
 
     manifest_path = project_root / ".ai-sync.yaml"
     manifest_path.write_text(
@@ -247,24 +253,24 @@ def test_saved_plan_invalidates_when_manifest_changes(tmp_path: Path) -> None:
         encoding="utf-8",
     )
 
-    current = build_plan_context(project_root, config_root, display)
+    current = _build_plan_context(project_root, config_root, display)
     with pytest.raises(RuntimeError, match="Saved plan is no longer valid"):
-        validate_saved_plan(plan_path, current.plan)
+        PLAN_PERSISTENCE.validate_saved_plan(plan_path, current.plan)
 
 
 def test_saved_plan_invalidates_when_prompt_file_changes(tmp_path: Path) -> None:
     config_root, project_root = _write_project(tmp_path)
-    display = PlainDisplay()
-    context = build_plan_context(project_root, config_root, display)
-    plan_path = default_plan_path(project_root)
-    save_plan(context.plan, plan_path)
+    display = PlainDisplayService()
+    context = _build_plan_context(project_root, config_root, display)
+    plan_path = PLAN_PERSISTENCE.default_plan_path(project_root)
+    PLAN_PERSISTENCE.save_plan(context.plan, plan_path)
 
     prompt_path = tmp_path / "company-source" / "commands" / "session-summary" / "prompt.md"
     prompt_path.write_text("Summarize differently\n", encoding="utf-8")
 
-    current = build_plan_context(project_root, config_root, display)
+    current = _build_plan_context(project_root, config_root, display)
     with pytest.raises(RuntimeError, match="Saved plan is no longer valid"):
-        validate_saved_plan(plan_path, current.plan)
+        PLAN_PERSISTENCE.validate_saved_plan(plan_path, current.plan)
 
 
 def test_local_var_preserved_from_existing_env(tmp_path: Path) -> None:
@@ -277,8 +283,8 @@ def test_local_var_preserved_from_existing_env(tmp_path: Path) -> None:
 
     (project_root / ".env.ai-sync").write_text("MY_PAT=my-secret-value\n", encoding="utf-8")
 
-    display = PlainDisplay()
-    context = build_plan_context(project_root, config_root, display)
+    display = PlainDisplayService()
+    context = _build_plan_context(project_root, config_root, display)
 
     assert context.runtime_env.env["MY_PAT"] == "my-secret-value"
     assert "MY_PAT" not in context.runtime_env.unfilled_local_vars
@@ -292,9 +298,9 @@ def test_unfilled_local_var_referenced_by_mcp_raises(tmp_path: Path) -> None:
         encoding="utf-8",
     )
 
-    display = PlainDisplay()
+    display = PlainDisplayService()
     with pytest.raises(RuntimeError, match="local-scoped.*Set its value"):
-        build_plan_context(project_root, config_root, display)
+        _build_plan_context(project_root, config_root, display)
 
 
 def test_unfilled_local_var_not_referenced_by_mcp_succeeds(tmp_path: Path) -> None:
@@ -305,8 +311,8 @@ def test_unfilled_local_var_not_referenced_by_mcp_succeeds(tmp_path: Path) -> No
         encoding="utf-8",
     )
 
-    display = PlainDisplay()
-    context = build_plan_context(project_root, config_root, display)
+    display = PlainDisplayService()
+    context = _build_plan_context(project_root, config_root, display)
 
     assert "OPTIONAL_PAT" in context.runtime_env.unfilled_local_vars
     assert "OPTIONAL_PAT" in context.runtime_env.local_vars
@@ -358,7 +364,7 @@ def test_build_plan_no_collision_with_alias_prefixed_commands(tmp_path: Path) ->
         encoding="utf-8",
     )
 
-    display = PlainDisplay()
-    context = build_plan_context(project_root, config_root, display)
+    display = PlainDisplayService()
+    context = _build_plan_context(project_root, config_root, display)
     command_actions = [a for a in context.plan.actions if a.kind == "command"]
     assert len(command_actions) >= 2

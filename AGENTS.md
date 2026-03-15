@@ -7,6 +7,10 @@ This file defines project-level guidance for coding assistants working in this r
 `ai-sync` keeps AI tooling configuration project-scoped, reproducible, and safe across supported clients (Codex, Cursor, Gemini, Claude Code).
 It syncs reusable resources from source repos into local project outputs so teams share the same assistant behavior without relying on machine-global setup.
 
+## Project structure
+
+- In `services` folder please write the services only, one file equals one service and the name of the class and the file should be consistent.
+
 ## Vocabulary
 
 - **Source**: a local or remote repository that provides reusable AI resources.
@@ -34,6 +38,14 @@ It syncs reusable resources from source repos into local project outputs so team
 - MUST provide clear `--help` and `--version` behavior.
 - SHOULD use subcommands for distinct operations (`plan`, `apply`, `doctor`, etc.) and keep argument names stable.
 - SHOULD keep CLI UX predictable: options first, `--` delimiter support, and consistent flag naming.
+
+## DI Architecture Expectations
+
+- MUST keep runtime wiring in `ai_sync.di` (`AppContainer` + `bootstrap_runtime`) and avoid ad-hoc composition in feature modules.
+- MUST expose orchestration behavior through service classes in `ai_sync.services`, not module-level runtime wrapper functions.
+- SHOULD keep module-level helpers stateless where possible; stateful orchestration belongs on injected services.
+- MUST keep `cli.main()` as the only runtime entrypoint that resolves top-level handlers from the container.
+- MUST prefer provider overrides (`container.override_providers(...)`) in tests over monkeypatching module runtime functions.
 
 ## Core Expectations
 
@@ -69,7 +81,6 @@ It syncs reusable resources from source repos into local project outputs so team
 Do not manually edit content inside managed marker blocks.
 
 <!-- BEGIN ai-sync:rules-index -->
-
 ## ai-sync Rules (managed)
 
 You MUST read and follow ALL rules listed below:

@@ -3,8 +3,14 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from ai_sync.state_store import StateStore
-from ai_sync.track_write import WriteSpec, track_write_blocks
+from ai_sync.adapters.state_store import StateStore
+from ai_sync.data_classes.write_spec import WriteSpec
+from ai_sync.di import create_container
+
+
+def _track_write(specs: list[WriteSpec], store: StateStore) -> None:
+    container = create_container()
+    container.managed_output_service().track_write_blocks(specs, store)
 
 
 def test_track_write_text_marker_idempotent(tmp_path: Path, monkeypatch) -> None:
@@ -17,11 +23,11 @@ def test_track_write_text_marker_idempotent(tmp_path: Path, monkeypatch) -> None
         target="ai-sync:mcp-instructions",
         value="Hello world\n",
     )
-    track_write_blocks([spec], store)
+    _track_write([spec], store)
     first = target.read_text(encoding="utf-8")
     assert "BEGIN ai-sync:mcp-instructions" in first
 
-    track_write_blocks([spec], store)
+    _track_write([spec], store)
     second = target.read_text(encoding="utf-8")
     assert second == first
 
@@ -39,7 +45,7 @@ def test_track_write_structured_leaf_preserves_other_keys(tmp_path: Path, monkey
         target="/permissions/allow",
         value=["Read(*)", "Write(*)"],
     )
-    track_write_blocks([spec], store)
+    _track_write([spec], store)
     content = target.read_text(encoding="utf-8")
     assert '"other": 1' in content
     assert "Write(*)" in content
@@ -53,7 +59,7 @@ def test_track_write_structured_root_list(tmp_path: Path, monkeypatch) -> None:
         WriteSpec(file_path=target, format="json", target="/", value=[]),
         WriteSpec(file_path=target, format="json", target="/0", value={"name": "alpha"}),
     ]
-    track_write_blocks(specs, store)
+    _track_write(specs, store)
     data = json.loads(target.read_text(encoding="utf-8"))
     assert data == [{"name": "alpha"}]
 
@@ -68,8 +74,8 @@ def test_track_write_text_marker_with_literal_backslash_u(tmp_path: Path, monkey
         target="ai-sync:mcp-instructions",
         value="Literal escape: \\u2019 should stay.\n",
     )
-    track_write_blocks([spec], store)
-    track_write_blocks([spec], store)
+    _track_write([spec], store)
+    _track_write([spec], store)
     content = target.read_text(encoding="utf-8")
     assert "\\u2019" in content
 
@@ -84,7 +90,7 @@ def test_track_write_agent_markdown_uses_full_file(tmp_path: Path, monkeypatch) 
         target="ai-sync:agent:test-agent",
         value="---\nname: test-agent\ndescription: Test agent\n---\n\nBody.\n",
     )
-    track_write_blocks([spec], store)
+    _track_write([spec], store)
     content = target.read_text(encoding="utf-8")
     assert content.startswith("---\nname: test-agent")
     assert "BEGIN ai-sync:agent:test-agent" not in content

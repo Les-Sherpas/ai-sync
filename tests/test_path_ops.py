@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from ai_sync.path_ops import (
+from ai_sync.helpers import (
     delete_at_path,
     escape_path_segment,
     get_at_path,

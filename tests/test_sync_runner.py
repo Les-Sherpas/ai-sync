@@ -3,13 +3,19 @@ from __future__ import annotations
 from pathlib import Path
 from typing import cast
 
-from ai_sync import sync_runner
-from ai_sync.artifacts import _agent_artifacts, _command_artifacts, _skill_artifacts
 from ai_sync.clients.base import Client
-from ai_sync.env_config import RuntimeEnv
-from ai_sync.project import ProjectManifest, SourceConfig
-from ai_sync.source_resolver import ResolvedSource
-from ai_sync.track_write import WriteSpec
+from ai_sync.data_classes.resolved_artifact_set import ResolvedArtifactSet
+from ai_sync.data_classes.resolved_source import ResolvedSource
+from ai_sync.data_classes.runtime_env import RuntimeEnv
+from ai_sync.data_classes.write_spec import WriteSpec
+from ai_sync.di import create_container
+from ai_sync.models import ProjectManifest, SourceConfig
+from ai_sync.services.artifact_service import (
+    ArtifactService,
+    _agent_artifacts,
+    _command_artifacts,
+    _skill_artifacts,
+)
 
 
 class FakeDisplay:
@@ -129,21 +135,56 @@ def _make_repo_root(tmp_path: Path) -> Path:
     return root
 
 
+def _run_apply(*, project_root: Path, resolved_artifacts, display) -> int:
+    container = create_container()
+    return container.apply_service().run_apply(
+        project_root=project_root,
+        resolved_artifacts=resolved_artifacts,
+        runtime_env=RuntimeEnv(),
+        display=display,
+    )
+
+
+def _resolve_artifacts(
+    *,
+    project_root: Path,
+    manifest: ProjectManifest,
+    resolved_sources: dict[str, ResolvedSource],
+    runtime_env: RuntimeEnv,
+    mcp_manifest: dict,
+    clients,
+):
+    artifacts = ArtifactService().collect_artifacts(
+        project_root=project_root,
+        manifest=manifest,
+        resolved_sources=resolved_sources,
+        runtime_env=runtime_env,
+        mcp_manifest=mcp_manifest,
+        clients=clients,
+    )
+    entries = []
+    desired_targets: set[tuple[str, str, str]] = set()
+    for artifact in artifacts:
+        specs = artifact.resolve()
+        entries.append((artifact, specs))
+        for spec in specs:
+            desired_targets.add((str(spec.file_path), spec.format, spec.target))
+    return ResolvedArtifactSet(entries=entries, desired_targets=desired_targets)
+
+
 # ---------------------------------------------------------------------------
 # run_apply integration tests
 # ---------------------------------------------------------------------------
 
 
-def test_run_apply_syncs_agents_and_mcp(monkeypatch, tmp_path: Path) -> None:
+def test_run_apply_syncs_agents_and_mcp(tmp_path: Path) -> None:
     repo_root = _make_repo_root(tmp_path)
     project_root = tmp_path / "project"
     project_root.mkdir()
     (project_root / ".ai-sync.yaml").write_text("sources: {}\n", encoding="utf-8")
 
     display = FakeDisplay()
-    calls: list[str] = []
-    dummy_clients = [DummyClient("codex", project_root, calls)]
-    monkeypatch.setattr(sync_runner, "create_clients", lambda pr: dummy_clients)
+    dummy_clients = [DummyClient("codex", project_root, [])]
 
     resolved_sources = {"company": _resolved("company", repo_root)}
     manifest = ProjectManifest(
@@ -156,16 +197,15 @@ def test_run_apply_syncs_agents_and_mcp(monkeypatch, tmp_path: Path) -> None:
     )
     mcp_manifest = {"srv": {"method": "stdio", "command": "npx", "env": {"TOKEN": "abc"}}}
 
-    result = sync_runner.run_apply(
+    resolved = _resolve_artifacts(
         project_root=project_root,
-        source_roots={"company": repo_root},
         manifest=manifest,
-        mcp_manifest=mcp_manifest,
-        secrets={},
-        runtime_env=RuntimeEnv(),
         resolved_sources=resolved_sources,
-        display=display,
+        runtime_env=RuntimeEnv(),
+        mcp_manifest=mcp_manifest,
+        clients=dummy_clients,
     )
+    result = _run_apply(project_root=project_root, resolved_artifacts=resolved, display=display)
     assert result == 0
 
     agent_prompt = project_root / ".codex" / "agents" / "company-agent" / "prompt.md"
@@ -176,7 +216,7 @@ def test_run_apply_syncs_agents_and_mcp(monkeypatch, tmp_path: Path) -> None:
     assert mcp_config.exists()
 
 
-def test_run_apply_writes_rules_and_index(monkeypatch, tmp_path: Path) -> None:
+def test_run_apply_writes_rules_and_index(tmp_path: Path) -> None:
     repo_root = _make_repo_root(tmp_path)
     project_root = tmp_path / "project"
     project_root.mkdir()
@@ -185,7 +225,6 @@ def test_run_apply_writes_rules_and_index(monkeypatch, tmp_path: Path) -> None:
 
     display = FakeDisplay()
     dummy_clients = [DummyClient("codex", project_root, [])]
-    monkeypatch.setattr(sync_runner, "create_clients", lambda pr: dummy_clients)
 
     resolved_sources = {"company": _resolved("company", repo_root)}
     manifest = ProjectManifest(
@@ -193,16 +232,15 @@ def test_run_apply_writes_rules_and_index(monkeypatch, tmp_path: Path) -> None:
         rules=["company/commit"],
     )
 
-    result = sync_runner.run_apply(
+    resolved = _resolve_artifacts(
         project_root=project_root,
-        source_roots={"company": repo_root},
         manifest=manifest,
-        mcp_manifest={},
-        secrets={},
-        runtime_env=RuntimeEnv(),
         resolved_sources=resolved_sources,
-        display=display,
+        runtime_env=RuntimeEnv(),
+        mcp_manifest={},
+        clients=dummy_clients,
     )
+    result = _run_apply(project_root=project_root, resolved_artifacts=resolved, display=display)
     assert result == 0
 
     rule_file = project_root / ".ai-sync" / "rules" / "company-commit.md"
@@ -214,7 +252,7 @@ def test_run_apply_writes_rules_and_index(monkeypatch, tmp_path: Path) -> None:
     assert "company-commit" in agents_content
 
 
-def test_run_apply_removes_stale_rules(monkeypatch, tmp_path: Path) -> None:
+def test_run_apply_removes_stale_rules(tmp_path: Path) -> None:
     repo_root = _make_repo_root(tmp_path)
     project_root = tmp_path / "project"
     project_root.mkdir()
@@ -223,7 +261,6 @@ def test_run_apply_removes_stale_rules(monkeypatch, tmp_path: Path) -> None:
 
     display = FakeDisplay()
     dummy_clients = [DummyClient("codex", project_root, [])]
-    monkeypatch.setattr(sync_runner, "create_clients", lambda pr: dummy_clients)
 
     resolved_sources = {"company": _resolved("company", repo_root)}
 
@@ -231,30 +268,28 @@ def test_run_apply_removes_stale_rules(monkeypatch, tmp_path: Path) -> None:
         sources={"company": SourceConfig(source=str(repo_root))},
         rules=["company/commit"],
     )
-    sync_runner.run_apply(
+    resolved_with = _resolve_artifacts(
         project_root=project_root,
-        source_roots={"company": repo_root},
         manifest=manifest_with,
-        mcp_manifest={},
-        secrets={},
-        runtime_env=RuntimeEnv(),
         resolved_sources=resolved_sources,
-        display=display,
+        runtime_env=RuntimeEnv(),
+        mcp_manifest={},
+        clients=dummy_clients,
     )
+    _run_apply(project_root=project_root, resolved_artifacts=resolved_with, display=display)
 
     manifest_empty = ProjectManifest(
         sources={"company": SourceConfig(source=str(repo_root))},
     )
-    sync_runner.run_apply(
+    resolved_empty = _resolve_artifacts(
         project_root=project_root,
-        source_roots={"company": repo_root},
         manifest=manifest_empty,
-        mcp_manifest={},
-        secrets={},
-        runtime_env=RuntimeEnv(),
         resolved_sources=resolved_sources,
-        display=display,
+        runtime_env=RuntimeEnv(),
+        mcp_manifest={},
+        clients=dummy_clients,
     )
+    _run_apply(project_root=project_root, resolved_artifacts=resolved_empty, display=display)
 
     rule_file = project_root / ".ai-sync" / "rules" / "company-commit.md"
     assert not rule_file.exists()
@@ -296,7 +331,10 @@ def test_skill_artifacts_include_all_files(tmp_path: Path) -> None:
     assert len(artifacts) == 1
 
     specs = artifacts[0].resolve()
-    rel_paths = {s.file_path.relative_to(project_root / ".codex" / "skills" / "company-skill-one").as_posix() for s in specs}
+    rel_paths = {
+        s.file_path.relative_to(project_root / ".codex" / "skills" / "company-skill-one").as_posix()
+        for s in specs
+    }
     assert "SKILL.md" in rel_paths
     assert "reference.md" in rel_paths
     assert "files/reference.md" not in rel_paths
@@ -325,7 +363,6 @@ def test_command_artifacts_produce_write_specs(tmp_path: Path) -> None:
     project_root = tmp_path / "project"
     project_root.mkdir()
     client = DummyClient("codex", project_root, [])
-    display = FakeDisplay()
     resolved_sources = {"company": _resolved("company", repo_root)}
 
     manifest = ProjectManifest(
@@ -333,7 +370,7 @@ def test_command_artifacts_produce_write_specs(tmp_path: Path) -> None:
         commands=["company/review/shortcut"],
     )
 
-    artifacts = _command_artifacts(manifest, resolved_sources, [client], display)
+    artifacts = _command_artifacts(manifest, resolved_sources, [client])
     assert len(artifacts) == 1
     assert artifacts[0].kind == "command"
 
@@ -357,7 +394,6 @@ def test_agent_artifacts_use_scoped_alias(tmp_path: Path) -> None:
     project_root = tmp_path / "project"
     project_root.mkdir()
     client = DummyClient("codex", project_root, [])
-    display = FakeDisplay()
     resolved_sources = {"company": _resolved("company", repo_a)}
 
     manifest = ProjectManifest(
@@ -365,7 +401,7 @@ def test_agent_artifacts_use_scoped_alias(tmp_path: Path) -> None:
         agents=["company/agent"],
     )
 
-    artifacts = _agent_artifacts(manifest, resolved_sources, [client], display)
+    artifacts = _agent_artifacts(manifest, resolved_sources, [client])
     assert len(artifacts) == 1
 
     specs = artifacts[0].resolve()

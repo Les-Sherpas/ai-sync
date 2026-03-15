@@ -2,14 +2,15 @@ from __future__ import annotations
 
 from io import StringIO
 from pathlib import Path
-from types import SimpleNamespace
-
 import pytest
+from dependency_injector import providers
 
-from ai_sync import cli, command_handlers
-from ai_sync.display import PlainDisplay
-from ai_sync.git_safety import SENSITIVE_PATHS
-from ai_sync.planning import PlanAction
+from ai_sync import cli
+from ai_sync.di import create_container
+from ai_sync.models import ApplyPlan, PlanAction
+from ai_sync.services.config_store_service import ConfigStoreService
+from ai_sync.services.git_safety_service import SENSITIVE_PATHS
+from ai_sync.services.plain_display_service import PlainDisplayService
 
 
 class TTYStringIO(StringIO):
@@ -18,8 +19,8 @@ class TTYStringIO(StringIO):
 
 
 @pytest.fixture()
-def display() -> PlainDisplay:
-    return PlainDisplay()
+def display() -> PlainDisplayService:
+    return PlainDisplayService()
 
 
 def _write_project(tmp_path: Path, *, with_gitignore: bool = True) -> tuple[Path, Path]:
@@ -90,10 +91,29 @@ def _write_project(tmp_path: Path, *, with_gitignore: bool = True) -> tuple[Path
     return config_root, project_root
 
 
-def test_run_install_writes_config(monkeypatch, tmp_path: Path, display: PlainDisplay) -> None:
-    monkeypatch.setattr(command_handlers, "ensure_layout", lambda: tmp_path)
+class _FixedConfigStoreService(ConfigStoreService):
+    def __init__(self, root: Path) -> None:
+        super().__init__()
+        self._root = root
+
+    def get_config_root(self) -> Path:
+        return self._root
+
+
+class _FixedProjectLocatorService:
+    def __init__(self, root: Path | None) -> None:
+        self._root = root
+
+    def find_project_root(self, start: Path | None = None) -> Path | None:
+        return self._root
+
+
+def test_run_install_writes_config(tmp_path: Path, display: PlainDisplayService) -> None:
+    container = create_container()
+    container.override_providers(config_store_service=providers.Object(_FixedConfigStoreService(tmp_path)))
+    service = container.install_service()
     assert (
-        command_handlers.run_install_command(
+        service.run(
             display=display,
             op_account_identifier="example.1password.com",
             force=True,
@@ -103,16 +123,18 @@ def test_run_install_writes_config(monkeypatch, tmp_path: Path, display: PlainDi
     assert "op_account_identifier" in (tmp_path / "config.toml").read_text(encoding="utf-8")
 
 
-def test_run_install_requires_op_account_identifier(monkeypatch, tmp_path: Path, display: PlainDisplay) -> None:
-    monkeypatch.setattr(command_handlers, "ensure_layout", lambda: tmp_path)
+def test_run_install_requires_op_account_identifier(
+    tmp_path: Path, display: PlainDisplayService
+) -> None:
     stdin = StringIO()
+    container = create_container(environ={}, stdin=stdin)
+    container.override_providers(config_store_service=providers.Object(_FixedConfigStoreService(tmp_path)))
+    service = container.install_service()
     assert (
-        command_handlers.run_install_command(
+        service.run(
             display=display,
             op_account_identifier=None,
             force=True,
-            environ={},
-            stdin=stdin,
         )
         == 1
     )
@@ -131,80 +153,81 @@ def test_build_parser_accepts_op_account_identifier_flag() -> None:
     assert args.op_account_identifier == "example.1password.com"
 
 
-def test_run_plan_saves_plan_file(monkeypatch, tmp_path: Path, display: PlainDisplay) -> None:
+def test_run_plan_saves_plan_file(tmp_path: Path, display: PlainDisplayService) -> None:
     config_root, project_root = _write_project(tmp_path)
-    monkeypatch.setattr(command_handlers, "find_project_root", lambda: project_root)
-    assert command_handlers.run_plan_command(config_root=config_root, display=display, out=None) == 0
+    container = create_container()
+    container.override_providers(
+        project_locator_service=providers.Object(_FixedProjectLocatorService(project_root))
+    )
+    service = container.plan_service()
+    assert service.run(config_root=config_root, display=display, out=None) == 0
     assert (project_root / ".ai-sync" / "last-plan.yaml").exists()
 
 
-def test_run_plan_without_gitignore_still_succeeds(monkeypatch, tmp_path: Path, display: PlainDisplay) -> None:
+def test_run_plan_without_gitignore_still_succeeds(
+    tmp_path: Path, display: PlainDisplayService
+) -> None:
     config_root, project_root = _write_project(tmp_path, with_gitignore=False)
-    monkeypatch.setattr(command_handlers, "find_project_root", lambda: project_root)
-    assert command_handlers.run_plan_command(config_root=config_root, display=display, out=None) == 0
+    container = create_container()
+    container.override_providers(
+        project_locator_service=providers.Object(_FixedProjectLocatorService(project_root))
+    )
+    service = container.plan_service()
+    assert service.run(config_root=config_root, display=display, out=None) == 0
     assert (project_root / ".ai-sync" / "last-plan.yaml").exists()
 
 
-def test_run_apply_uses_saved_plan_when_provided(monkeypatch, tmp_path: Path, display: PlainDisplay) -> None:
+def test_run_apply_uses_saved_plan_when_provided(
+    tmp_path: Path, display: PlainDisplayService
+) -> None:
     config_root, project_root = _write_project(tmp_path)
-    monkeypatch.setattr(command_handlers, "find_project_root", lambda: project_root)
-    assert command_handlers.run_plan_command(config_root=config_root, display=display, out=None) == 0
+    container = create_container()
+    container.override_providers(
+        project_locator_service=providers.Object(_FixedProjectLocatorService(project_root))
+    )
+    assert container.plan_service().run(config_root=config_root, display=display, out=None) == 0
 
-    captured: dict[str, object] = {}
-
-    def _fake_run_apply(**kwargs):
-        captured.update(kwargs)
-        return 0
-
-    monkeypatch.setattr(command_handlers, "run_apply", _fake_run_apply)
     assert (
-        command_handlers.run_apply_command(
+        container.apply_service().run(
             config_root=config_root,
             display=display,
             planfile=str(project_root / ".ai-sync" / "last-plan.yaml"),
         )
         == 0
     )
-    assert "source_roots" in captured
 
 
-def test_run_apply_without_plan_builds_fresh_plan(monkeypatch, tmp_path: Path, display: PlainDisplay) -> None:
+def test_run_apply_without_plan_builds_fresh_plan(
+    tmp_path: Path, display: PlainDisplayService
+) -> None:
     config_root, project_root = _write_project(tmp_path)
-    monkeypatch.setattr(command_handlers, "find_project_root", lambda: project_root)
-
-    captured: dict[str, object] = {}
-
-    def _fake_run_apply(**kwargs):
-        captured.update(kwargs)
-        return 0
-
-    monkeypatch.setattr(command_handlers, "run_apply", _fake_run_apply)
-    assert command_handlers.run_apply_command(config_root=config_root, display=display, planfile=None) == 0
-    assert "manifest" in captured
+    container = create_container()
+    container.override_providers(
+        project_locator_service=providers.Object(_FixedProjectLocatorService(project_root))
+    )
+    assert container.apply_service().run(config_root=config_root, display=display, planfile=None) == 0
 
 
-def test_run_apply_without_gitignore_still_succeeds(monkeypatch, tmp_path: Path, display: PlainDisplay) -> None:
+def test_run_apply_without_gitignore_still_succeeds(
+    tmp_path: Path, display: PlainDisplayService
+) -> None:
     config_root, project_root = _write_project(tmp_path, with_gitignore=False)
-    monkeypatch.setattr(command_handlers, "find_project_root", lambda: project_root)
-
-    captured: dict[str, object] = {}
-
-    def _fake_run_apply(**kwargs):
-        captured.update(kwargs)
-        return 0
-
-    monkeypatch.setattr(command_handlers, "run_apply", _fake_run_apply)
-    assert command_handlers.run_apply_command(config_root=config_root, display=display, planfile=None) == 0
-    assert "manifest" in captured
+    container = create_container()
+    container.override_providers(
+        project_locator_service=providers.Object(_FixedProjectLocatorService(project_root))
+    )
+    assert container.apply_service().run(config_root=config_root, display=display, planfile=None) == 0
 
 
 def test_run_apply_prints_plan_and_not_legacy_sync_sections(
-    monkeypatch, tmp_path: Path, display: PlainDisplay, capsys
+    tmp_path: Path, display: PlainDisplayService, capsys
 ) -> None:
     config_root, project_root = _write_project(tmp_path)
-    monkeypatch.setattr(command_handlers, "find_project_root", lambda: project_root)
-
-    assert command_handlers.run_apply_command(config_root=config_root, display=display, planfile=None) == 0
+    container = create_container()
+    container.override_providers(
+        project_locator_service=providers.Object(_FixedProjectLocatorService(project_root))
+    )
+    assert container.apply_service().run(config_root=config_root, display=display, planfile=None) == 0
 
     out = capsys.readouterr().out
     assert "Planned Actions" in out
@@ -213,53 +236,67 @@ def test_run_apply_prints_plan_and_not_legacy_sync_sections(
 
 
 def test_run_apply_without_project_mentions_both_manifest_names(
-    monkeypatch, tmp_path: Path, display: PlainDisplay, capsys
+    tmp_path: Path, display: PlainDisplayService, capsys
 ) -> None:
     config_root, _project_root = _write_project(tmp_path)
-    monkeypatch.setattr(command_handlers, "find_project_root", lambda: None)
-
-    assert command_handlers.run_apply_command(config_root=config_root, display=display, planfile=None) == 1
+    container = create_container()
+    container.override_providers(
+        project_locator_service=providers.Object(_FixedProjectLocatorService(None))
+    )
+    assert container.apply_service().run(config_root=config_root, display=display, planfile=None) == 1
 
     out = capsys.readouterr().out
     assert "No .ai-sync.local.yaml or .ai-sync.yaml found. Create one first." in out
 
 
 def test_run_doctor_without_project_mentions_both_manifest_names(
-    monkeypatch, tmp_path: Path, display: PlainDisplay, capsys
+    tmp_path: Path, display: PlainDisplayService, capsys
 ) -> None:
     config_root, _project_root = _write_project(tmp_path)
-    monkeypatch.setattr(command_handlers, "find_project_root", lambda: None)
-
-    assert command_handlers.run_doctor_command(config_root=config_root, display=display) == 0
+    container = create_container()
+    container.override_providers(
+        project_locator_service=providers.Object(_FixedProjectLocatorService(None))
+    )
+    assert container.doctor_service().run(config_root=config_root, display=display) == 0
 
     out = capsys.readouterr().out
     assert "No project found (no .ai-sync.local.yaml or .ai-sync.yaml in current directory tree)" in out
 
 
-def test_run_doctor_reports_local_manifest_name(monkeypatch, tmp_path: Path, display: PlainDisplay, capsys) -> None:
+def test_run_doctor_reports_local_manifest_name(
+    tmp_path: Path, display: PlainDisplayService, capsys
+) -> None:
     config_root, project_root = _write_project(tmp_path)
     (project_root / ".ai-sync.local.yaml").write_text("sources: {}\n", encoding="utf-8")
-    monkeypatch.setattr(command_handlers, "find_project_root", lambda: project_root)
-
-    assert command_handlers.run_doctor_command(config_root=config_root, display=display) == 0
+    container = create_container()
+    container.override_providers(
+        project_locator_service=providers.Object(_FixedProjectLocatorService(project_root))
+    )
+    assert container.doctor_service().run(config_root=config_root, display=display) == 0
 
     out = capsys.readouterr().out
     assert ".ai-sync.local.yaml: OK (0 sources declared)" in out
 
 
 def test_run_uninstall_without_project_mentions_both_manifest_names(
-    monkeypatch, display: PlainDisplay, capsys
+    display: PlainDisplayService, capsys
 ) -> None:
-    monkeypatch.setattr(command_handlers, "find_project_root", lambda: None)
-
-    assert command_handlers.run_uninstall_command(display=display, apply=False) == 1
+    container = create_container()
+    container.override_providers(
+        project_locator_service=providers.Object(_FixedProjectLocatorService(None))
+    )
+    assert container.uninstall_service().run(display=display, apply=False) == 1
 
     out = capsys.readouterr().out
     assert "No .ai-sync.local.yaml or .ai-sync.yaml found. Nothing to uninstall." in out
 
 
-def test_confirm_plan_deletions_accepts_yes(display: PlainDisplay) -> None:
-    plan = SimpleNamespace(
+def _make_plan_with_deletion() -> ApplyPlan:
+    return ApplyPlan(
+        created_at="2024-01-01T00:00:00Z",
+        project_root="/tmp",
+        manifest_path="/tmp/.ai-sync.yaml",
+        manifest_fingerprint="abc",
         actions=[
             PlanAction(
                 action="delete",
@@ -269,65 +306,26 @@ def test_confirm_plan_deletions_accepts_yes(display: PlainDisplay) -> None:
                 target="/tmp/skill",
                 target_key="/tmp/skill",
             )
-        ]
+        ],
     )
+
+
+def test_confirm_plan_deletions_accepts_yes(display: PlainDisplayService) -> None:
+    plan = _make_plan_with_deletion()
     stdin = TTYStringIO()
-    assert (
-        command_handlers._confirm_plan_deletions(
-            plan,
-            display,
-            stdin=stdin,
-            prompt_input=lambda _prompt: "y",
-        )
-        is True
-    )
+    container = create_container(stdin=stdin, prompt_input=lambda _prompt: "y")
+    assert container.apply_service().confirm_plan_deletions(plan, display) is True
 
 
-def test_confirm_plan_deletions_rejects_no(display: PlainDisplay) -> None:
-    plan = SimpleNamespace(
-        actions=[
-            PlanAction(
-                action="delete",
-                source_alias="company",
-                kind="skill",
-                resource="company/code-review",
-                target="/tmp/skill",
-                target_key="/tmp/skill",
-            )
-        ]
-    )
+def test_confirm_plan_deletions_rejects_no(display: PlainDisplayService) -> None:
+    plan = _make_plan_with_deletion()
     stdin = TTYStringIO()
-    assert (
-        command_handlers._confirm_plan_deletions(
-            plan,
-            display,
-            stdin=stdin,
-            prompt_input=lambda _prompt: "n",
-        )
-        is False
-    )
+    container = create_container(stdin=stdin, prompt_input=lambda _prompt: "n")
+    assert container.apply_service().confirm_plan_deletions(plan, display) is False
 
 
-def test_confirm_plan_deletions_rejects_non_interactive(display: PlainDisplay) -> None:
-    plan = SimpleNamespace(
-        actions=[
-            PlanAction(
-                action="delete",
-                source_alias="company",
-                kind="skill",
-                resource="company/code-review",
-                target="/tmp/skill",
-                target_key="/tmp/skill",
-            )
-        ]
-    )
+def test_confirm_plan_deletions_rejects_non_interactive(display: PlainDisplayService) -> None:
+    plan = _make_plan_with_deletion()
     stdin = StringIO()
-    assert (
-        command_handlers._confirm_plan_deletions(
-            plan,
-            display,
-            stdin=stdin,
-            prompt_input=lambda _prompt: "y",
-        )
-        is False
-    )
+    container = create_container(stdin=stdin, prompt_input=lambda _prompt: "y")
+    assert container.apply_service().confirm_plan_deletions(plan, display) is False

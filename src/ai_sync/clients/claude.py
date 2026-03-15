@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
-from ai_sync.track_write import WriteSpec
+from ai_sync.data_classes.write_spec import WriteSpec
 
 from .base import Client
 
@@ -24,10 +23,11 @@ class ClaudeClient(Client):
         del prompt_src_path
         prefixed_slug = f"{alias}-{slug}"
         agent_path = self.get_agents_dir() / f"{prefixed_slug}.md"
+        agent_name = str(meta.get("name", slug))
         description = str(meta.get("description", "AI Agent"))
         content = f"""---
-name: {json.dumps(prefixed_slug)}
-description: {json.dumps(description)}
+name: {agent_name}
+description: {description}
 ---
 
 {raw_content}

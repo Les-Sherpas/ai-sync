@@ -9,8 +9,12 @@ from ai_sync.clients.claude import ClaudeClient
 from ai_sync.clients.codex import CodexClient
 from ai_sync.clients.cursor import CursorClient
 from ai_sync.clients.gemini import GeminiClient
-from ai_sync.state_store import StateStore
-from ai_sync.track_write import track_write_blocks
+from ai_sync.adapters.state_store import StateStore
+from ai_sync.di import create_container
+
+
+def track_write_blocks(specs, store) -> None:
+    create_container().managed_output_service().track_write_blocks(specs, store)
 
 
 def test_codex_sync_mcp_and_config(monkeypatch, tmp_path: Path) -> None:
@@ -93,7 +97,7 @@ def test_codex_write_agent(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setenv("HOME", str(tmp_path))
     store = StateStore(tmp_path)
     client = CodexClient(tmp_path)
-    meta = {"reasoning_effort": "medium", "web_search": False}
+    meta = {"reasoning_effort": "medium", "web_search": False, "description": "A test agent"}
     specs = client.build_agent_specs("default", "my-agent", meta, "Do the thing", Path("agent.md"))
     track_write_blocks(specs, store)
     agent_dir = tmp_path / ".codex" / "agents" / "default-my-agent"
@@ -104,6 +108,10 @@ def test_codex_write_agent(monkeypatch, tmp_path: Path) -> None:
     assert config["model"] == "auto"
     assert config["model_reasoning_effort"] == "medium"
     assert config["web_search"] == "off"
+    root_config = tomllib.loads((tmp_path / ".codex" / "config.toml").read_text(encoding="utf-8"))
+    agent_entry = root_config["agents"]["default-my-agent"]
+    assert agent_entry["config_file"] == "agents/default-my-agent/config.toml"
+    assert agent_entry["description"] == "A test agent"
 
 
 def test_cursor_write_agent(monkeypatch, tmp_path: Path) -> None:
@@ -118,21 +126,22 @@ def test_cursor_write_agent(monkeypatch, tmp_path: Path) -> None:
     content = agent_path.read_text(encoding="utf-8")
     assert "Task content" in content
     assert "is_background: true" in content
-    assert '"A test agent"' in content
+    assert "description: A test agent" in content
 
 
 def test_gemini_write_agent(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setenv("HOME", str(tmp_path))
     store = StateStore(tmp_path)
     client = GeminiClient(tmp_path)
-    meta = {"description": "Test desc", "tools": ["search", "browse"]}
+    meta = {"name": "My Agent", "description": "Test desc", "tools": ["search", "browse"]}
     specs = client.build_agent_specs("default", "my-agent", meta, "Prompt body", Path("agent.md"))
     track_write_blocks(specs, store)
     agent_path = tmp_path / ".gemini" / "agents" / "default-my-agent.md"
     assert agent_path.exists()
     content = agent_path.read_text(encoding="utf-8")
     assert "Prompt body" in content
-    assert "default-my-agent" in content
+    assert "name: My Agent" in content
+    assert "description: Test desc" in content
     assert '["search", "browse"]' in content
 
 
@@ -205,15 +214,15 @@ def test_claude_write_agent(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setenv("HOME", str(tmp_path))
     store = StateStore(tmp_path)
     client = ClaudeClient(tmp_path)
-    meta = {"description": "A test agent"}
+    meta = {"name": "My Agent", "description": "A test agent"}
     specs = client.build_agent_specs("default", "my-agent", meta, "Task content", Path("agent.md"))
     track_write_blocks(specs, store)
     agent_path = tmp_path / ".claude" / "agents" / "default-my-agent.md"
     assert agent_path.exists()
     content = agent_path.read_text(encoding="utf-8")
     assert "Task content" in content
-    assert "name: \"default-my-agent\"" in content
-    assert '"A test agent"' in content
+    assert "name: My Agent" in content
+    assert "description: A test agent" in content
 
 
 def test_claude_write_command(monkeypatch, tmp_path: Path) -> None:
