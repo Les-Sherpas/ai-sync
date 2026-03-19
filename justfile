@@ -7,7 +7,7 @@ default:
 
 install:
     poetry sync --with dev
-    {{venv}}/pre-commit install --hook-type pre-commit
+    {{venv}}/pre-commit install -f --hook-type pre-commit  # avoid migration mode / hook exit 1 on commit
 
 build-ui:
     cd ui && npm ci && npm run build
