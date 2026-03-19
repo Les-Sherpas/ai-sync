@@ -52,14 +52,28 @@ lint:
 fix:
     {{venv}}/ruff check --fix src/
 
-release version:
-    ./scripts/release_checks.sh {{version}}
+release bump:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    case "{{bump}}" in
+      major|minor|patch) ;;
+      *) echo "Usage: just release major|minor|patch" >&2; exit 1 ;;
+    esac
+    current=$(poetry version -s)
+    IFS='.' read -r major minor patch <<< "$current"
+    case "{{bump}}" in
+      major) version="$((major+1)).0.0" ;;
+      minor) version="$major.$((minor+1)).0" ;;
+      patch) version="$major.$minor.$((patch+1))" ;;
+    esac
+    echo "Releasing v$version ({{bump}} bump from $current)"
+    ./scripts/release_checks.sh "$version"
     just verify-embedded-ui
     poetry lock
-    poetry version {{version}}
+    poetry version "$version"
     just install
     just test
     git add pyproject.toml poetry.lock
-    git commit -m "release: v{{version}}"
-    git tag -a v{{version}} -m "v{{version}}"
+    git commit -m "release: v$version"
+    git tag -a "v$version" -m "v$version"
     git push --follow-tags
