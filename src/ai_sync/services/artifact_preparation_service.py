@@ -79,7 +79,7 @@ class ArtifactPreparationService:
             config_root,
         )
         for warning in runtime_env.warnings:
-            display.print(f"Warning: {warning}", style="warning")
+            display.print(warning, style="warning")
 
         # --- POST-RUNTIME PHASE ---
         # 4-8. Finalize MCP servers with runtime env
@@ -127,6 +127,7 @@ class ArtifactPreparationService:
                         local_default=existing.local_default,
                         secret_provider=existing.secret_provider,
                         secret_ref=existing.secret_ref,
+                        inject_as=existing.inject_as,
                     )
 
         def collect_bundle(ref: str, base_dir_name: str) -> None:
@@ -256,18 +257,24 @@ class ArtifactPreparationService:
         if not isinstance(mcp_runtime, dict):
             raise RuntimeError("MCP manifest must remain a mapping after dependency stripping.")
 
-        # 4-5. Collect required env refs and classify missing
+        # 4-5. Collect required env refs; unfilled local deps get empty placeholders for MCP only
         required_vars = svc.collect_env_refs(mcp_runtime) | svc.collect_declared_env_names(
             mcp_source_configs
         )
-        missing = sorted(required_vars - runtime_env.env.keys())
-        if missing:
+        mcp_env_map = dict(runtime_env.env)
+        for name in required_vars & runtime_env.unfilled_local_vars:
+            mcp_env_map[name] = ""
+        blocking_missing = sorted(required_vars - mcp_env_map.keys())
+        if blocking_missing:
             self._raise_missing_env_error(
-                missing, runtime_env, selected_dependencies, mcp_server_refs
+                blocking_missing,
+                runtime_env,
+                selected_dependencies,
+                mcp_server_refs,
             )
 
         # 6. Interpolate env references
-        resolved_mcp = svc.resolve_env_refs(mcp_runtime, runtime_env.env)
+        resolved_mcp = svc.resolve_env_refs(mcp_runtime, mcp_env_map)
         if not isinstance(resolved_mcp, dict):
             raise RuntimeError("Resolved MCP manifest must remain a mapping.")
 
@@ -275,7 +282,7 @@ class ArtifactPreparationService:
         resolved_mcp = svc.synthesize_env_from_dependencies(
             resolved_mcp,
             mcp_source_configs,
-            runtime_env.env,
+            mcp_env_map,
         )
 
         # 8. Reattach dependency metadata
@@ -321,36 +328,24 @@ class ArtifactPreparationService:
         selected_dependencies: dict[str, EnvDependency],
         mcp_server_refs: list[str],
     ) -> None:
-        """Raise a detailed error for unresolved MCP env variables."""
+        """Raise when MCP still needs env values that are not satisfiable (non-local gaps).
 
-        unfilled_local = [v for v in missing if v in runtime_env.unfilled_local_vars]
-        declared_unresolved = [
-            v
-            for v in missing
-            if v not in runtime_env.unfilled_local_vars and v in selected_dependencies
-        ]
-        undeclared = [
-            v
-            for v in missing
-            if v not in runtime_env.unfilled_local_vars and v not in selected_dependencies
-        ]
+        Unfilled ``local`` dependencies are handled earlier with empty placeholders for MCP
+        rendering only; callers must not pass those names here.
+        """
+        del runtime_env, mcp_server_refs
+        declared_unresolved = [v for v in missing if v in selected_dependencies]
+        undeclared = [v for v in missing if v not in selected_dependencies]
         parts: list[str] = []
-        if unfilled_local:
-            for name in unfilled_local:
-                cfg = runtime_env.local_vars.get(name)
-                hint = f" ({cfg.description})" if cfg and cfg.description else ""
-                parts.append(
-                    f"{name}{hint} is local-scoped. "
-                    "Set its value in .env.ai-sync and re-run."
-                )
         if declared_unresolved:
             parts.append(
-                "MCP config references env vars declared by selected artifacts but "
-                "unresolved at runtime: " + ", ".join(declared_unresolved)
+                "MCP config requires env vars declared by selected artifacts but "
+                "missing at runtime (not satisfiable from literals, defaults, secrets, or "
+                f".env.ai-sync): {', '.join(declared_unresolved)}"
             )
         if undeclared:
             parts.append(
                 "MCP config references env vars not declared in selected artifact "
-                "dependencies: " + ", ".join(undeclared)
+                f"dependencies: {', '.join(undeclared)}"
             )
         raise RuntimeError("\n".join(parts))

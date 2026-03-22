@@ -58,9 +58,10 @@ class EnvironmentService:
                         if dependency.description
                         else ""
                     )
+                    env_file = project_root / ".env.ai-sync"
                     warnings.append(
-                        f"{name}{hint} is local and has no value set in "
-                        f"{project_root / '.env.ai-sync'}."
+                        f"{name}{hint} is local-scoped with no value. "
+                        f"Add a line `{name}=...` to {env_file}, then re-run ai-sync."
                     )
                 continue
             assert dependency.mode == "secret"

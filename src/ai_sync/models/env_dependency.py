@@ -24,8 +24,9 @@ class EnvDependency:
     local_default: str | None = None
     secret_provider: Literal["op"] | None = None
     secret_ref: str | None = None
+    inject_as: str | None = None
 
-    def semantic_key(self) -> tuple[str, str | None, str | None, str | None, str | None]:
+    def semantic_key(self) -> tuple[str, str | None, str | None, str | None, str | None, str | None]:
         """Return a merge key that ignores non-runtime description text."""
         return (
             self.mode,
@@ -33,6 +34,7 @@ class EnvDependency:
             self.local_default,
             self.secret_provider,
             self.secret_ref,
+            self.inject_as,
         )
 
 
@@ -106,13 +108,22 @@ def _parse_env_dependency_entry(name: str, entry: object, *, context: str) -> En
             f"{context}: env dependency {name!r} must be a scalar string or mapping."
         )
 
-    unknown_fields = set(entry) - {"local", "secret", "description"}
+    unknown_fields = set(entry) - {"local", "secret", "description", "inject_as"}
     if unknown_fields:
         extras = ", ".join(sorted(str(k) for k in unknown_fields))
         raise RuntimeError(
             f"{context}: env dependency {name!r} supports only "
-            f"'local', 'secret', and 'description'; found: {extras}."
+            f"'local', 'secret', 'description', and 'inject_as'; found: {extras}."
         )
+
+    inject_as_raw = entry.get("inject_as")
+    if inject_as_raw is not None:
+        if not isinstance(inject_as_raw, str) or not ENV_VAR_NAME_RE.fullmatch(inject_as_raw):
+            raise RuntimeError(
+                f"{context}: env dependency {name!r} inject_as must match "
+                f"{ENV_VAR_NAME_RE.pattern!r}."
+            )
+    inject_as: str | None = inject_as_raw
 
     description = entry.get("description")
     if description is not None and not isinstance(description, str):
@@ -152,6 +163,7 @@ def _parse_env_dependency_entry(name: str, entry: object, *, context: str) -> En
             mode="local",
             description=description,
             local_default=default,
+            inject_as=inject_as,
         )
 
     secret = entry.get("secret")
@@ -182,4 +194,5 @@ def _parse_env_dependency_entry(name: str, entry: object, *, context: str) -> En
         description=description,
         secret_provider="op",
         secret_ref=ref,
+        inject_as=inject_as,
     )

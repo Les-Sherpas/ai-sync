@@ -19,6 +19,7 @@ class McpServerConfig(BaseModel):
     args: list[str] = Field(default_factory=list)
     url: str | None = None
     description: str
+    env: dict[str, str] = Field(default_factory=dict)
     trust: bool | None = None
     timeout_seconds: StrictInt | StrictFloat | None = None
     auth: dict[str, str] = Field(default_factory=dict)

@@ -162,13 +162,19 @@ class McpPreparationService:
             if isinstance(source_server, dict):
                 dependencies = source_server.get("dependencies")
                 if isinstance(dependencies, dict):
-                    synthesized_env = {
-                        name: env_map[name]
-                        for name, dep in dependencies.items()
-                        if isinstance(dep, EnvDependency) and name in env_map
-                    }
-                    if synthesized_env:
-                        next_server["env"] = synthesized_env
+                    synthesized_env = {}
+                    for name, dep in dependencies.items():
+                        if not isinstance(dep, EnvDependency) or name not in env_map:
+                            continue
+                        out_key = dep.inject_as if dep.inject_as is not None else name
+                        synthesized_env[out_key] = env_map[name]
+                    explicit_env = next_server.get("env")
+                    explicit_dict = (
+                        explicit_env if isinstance(explicit_env, dict) else {}
+                    )
+                    merged_env = {**synthesized_env, **explicit_dict}
+                    if merged_env:
+                        next_server["env"] = merged_env
             rendered[sid] = next_server
         return rendered
 

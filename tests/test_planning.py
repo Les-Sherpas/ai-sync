@@ -362,7 +362,7 @@ def test_local_var_preserved_from_existing_env(tmp_path: Path) -> None:
     assert "MY_PAT" not in context.runtime_env.unfilled_local_vars
 
 
-def test_unfilled_local_var_referenced_by_mcp_raises(tmp_path: Path) -> None:
+def test_unfilled_local_var_referenced_by_mcp_uses_empty_placeholder(tmp_path: Path) -> None:
     config_root, project_root = _write_project(tmp_path)
     source_root = tmp_path / "company-source"
     (source_root / "mcp-servers" / "context7" / "artifact.yaml").write_text(
@@ -379,8 +379,10 @@ def test_unfilled_local_var_referenced_by_mcp_raises(tmp_path: Path) -> None:
     )
 
     display = PlainDisplayService()
-    with pytest.raises(RuntimeError, match="local-scoped.*Set its value"):
-        _build_plan_context(project_root, config_root, display)
+    context = _build_plan_context(project_root, config_root, display)
+    assert "TOKEN" in context.runtime_env.unfilled_local_vars
+    by_id = {p.server_id: p for p in context.prepared_artifacts.mcp_servers}
+    assert by_id["context7"].runtime_config.get("env") == {"TOKEN": ""}
 
 
 def test_unfilled_local_var_not_referenced_by_mcp_succeeds(tmp_path: Path) -> None:

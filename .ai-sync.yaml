@@ -1,0 +1,46 @@
+sources:
+  base:
+    source: git@github.com:Ephasme/ai-sync-config-base.git
+    version: v1.3.0
+agents:
+  - base/cloud_infrastructure_engineer
+  - base/git_history_architect
+  - base/implementation_plan_reviewer
+  - base/prompt_engineer
+  - base/senior_software_engineer
+skills:
+  - base/aws-read-only-access
+  - base/code-quality-scan
+  - base/create-command
+  - base/create-mcp-server
+  - base/create-rule
+  - base/create-skill
+  - base/create-subagent
+  - base/git-safe-rebase
+  - base/pr-review-validator
+commands:
+  - base/agent_rollout_strategy
+  - base/check_plan_implementation
+  - base/claim_verification
+  - base/evaluate_plan_todos
+  - base/hardening_plan_loop
+  - base/session_summary
+rules:
+  - base/code-style
+  - base/commit-conventions
+  - base/testing
+mcp-servers:
+  - base/aws-cloudwatch
+  - base/aws-documentation
+  - base/aws-pricing
+  - base/context7
+  - base/exa
+  - base/excalidraw
+  - base/fetch
+  - base/github
+  - base/playwright
+  - base/stripe-live
+  - base/stripe-test
+settings:
+  mode: normal
+  subagents: true

@@ -174,21 +174,21 @@ def test_load_manifest_parses_server_dependencies(tmp_path: Path) -> None:
     assert deps["API_KEY"].mode == "secret"
 
 
-def test_load_manifest_rejects_authored_server_env(tmp_path: Path) -> None:
+def test_load_manifest_accepts_authored_server_env(tmp_path: Path) -> None:
     display = FakeDisplay()
-    server_dir = tmp_path / "mcp-servers" / "bad"
+    server_dir = tmp_path / "mcp-servers" / "ok"
     server_dir.mkdir(parents=True)
     (server_dir / "artifact.yaml").write_text(
-        "name: bad\n"
-        "description: bad MCP server.\n"
+        "name: OK\n"
+        "description: OK MCP server.\n"
         "method: stdio\n"
         "command: npx\n"
         "env:\n"
-        "  API_KEY: value\n",
+        "  API_KEY: ${RAW_API_KEY}\n",
         encoding="utf-8",
     )
-    with pytest.raises(RuntimeError, match="env"):
-        McpPreparationService().load_manifest(tmp_path, display)
+    data = McpPreparationService().load_manifest(tmp_path, display)
+    assert data["servers"]["ok"]["env"] == {"API_KEY": "${RAW_API_KEY}"}
 
 
 def test_load_manifest_rejects_authored_client_override_env(tmp_path: Path) -> None:
@@ -228,3 +228,29 @@ def test_load_manifest_rejects_invalid_server_dependency_shape(tmp_path: Path) -
     )
     with pytest.raises(RuntimeError, match="secret.ref"):
         McpPreparationService().load_manifest(tmp_path, display)
+
+
+def test_synthesize_env_from_dependencies_uses_inject_as() -> None:
+    svc = McpPreparationService()
+    source = {
+        "stripe": {
+            "dependencies": {
+                "STRIPE_LIVE_SECRET_KEY": EnvDependency(
+                    name="STRIPE_LIVE_SECRET_KEY",
+                    mode="secret",
+                    secret_provider="op",
+                    secret_ref="op://Vault/Item/live",
+                    inject_as="STRIPE_SECRET_KEY",
+                )
+            }
+        }
+    }
+    runtime = {"stripe": {"command": "npx", "args": []}}
+    out = svc.synthesize_env_from_dependencies(
+        runtime,
+        source,
+        {"STRIPE_LIVE_SECRET_KEY": "sk_live_xxx"},
+    )
+    stripe_server = out["stripe"]
+    assert isinstance(stripe_server, dict)
+    assert stripe_server["env"] == {"STRIPE_SECRET_KEY": "sk_live_xxx"}

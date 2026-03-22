@@ -204,7 +204,9 @@ def test_plan_endpoint_returns_plan_and_caches_context(tmp_path: Path) -> None:
         assert not data["plan"]["actions"][0]["display_target"].startswith(str(app.state.project_root))
 
 
-def test_plan_endpoint_returns_400_for_missing_local_env_used_by_mcp(tmp_path: Path) -> None:
+def test_plan_endpoint_succeeds_with_warning_for_missing_local_env_used_by_mcp(
+    tmp_path: Path,
+) -> None:
     client, app = _make_client(tmp_path)
     project_root = app.state.project_root
     source_root = tmp_path / "company-source"
@@ -229,10 +231,10 @@ def test_plan_endpoint_returns_400_for_missing_local_env_used_by_mcp(tmp_path: P
 
     response = client.get("/api/plan")
 
-    assert response.status_code == 400
-    assert "AWS_PROFILE" in response.json()["detail"]
-    assert "local-scoped" in response.json()["detail"]
-    assert app.state.cached_plan_context is None
+    assert response.status_code == 200
+    data = response.json()
+    assert any("AWS_PROFILE" in w for w in data.get("warnings", []))
+    assert app.state.cached_plan_context is not None
 
 
 def test_patch_manifest_updates_yaml_and_clears_cached_plan(tmp_path: Path) -> None:

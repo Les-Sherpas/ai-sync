@@ -192,7 +192,7 @@ A source repo is a catalog of reusable artifacts:
 - Commands come from `commands/**/<name>/artifact.yaml` plus sibling `prompt.md` and are referenced as `<alias>/<relative-path>`.
 - Rules come from `rules/<name>/artifact.yaml` plus `rules/<name>/prompt.md` and are referenced as `<alias>/<name>`.
 - MCP servers come from `mcp-servers/<server-id>/artifact.yaml` and are referenced as `<alias>/<server-id>`.
-- MCP-only: rendered subprocess `env` is synthesized from the server's declared `dependencies.env` entries after runtime resolution.
+- MCP-only: rendered subprocess `env` is synthesized from the server's declared `dependencies.env` entries after runtime resolution (optional per-entry `inject_as` renames the subprocess variable while keeping a unique dependency key for merging).
 
 ### Bundle artifact format
 
@@ -266,10 +266,10 @@ dependencies:
 
 - only dependencies from selected artifacts are resolved
 - `secret.provider` currently supports `op` only
-- unresolved declared local vars are warnings unless strict runtime interpolation requires them
+- unresolved declared local vars emit warnings; MCP rendering uses empty placeholders for those vars so plan/apply can still complete (set values in `.env.ai-sync` for working MCP servers)
 - `.env.ai-sync` is generated only when selected dependencies include `local` entries
 - secret dependencies are never written to `.env.ai-sync`
-- for MCP servers, `ai-sync` renders subprocess `env` from `dependencies.env`; do not author MCP `env` blocks in source artifacts
+- for MCP servers, `ai-sync` renders subprocess `env` from `dependencies.env`; use `inject_as` when several servers must expose the same subprocess name (for example `STRIPE_SECRET_KEY`) but need distinct dependency keys and secret refs; avoid top-level MCP `env` unless you need `${VAR}` interpolation outside `dependencies.env`
 
 ### Binary rules
 

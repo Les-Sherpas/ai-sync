@@ -87,6 +87,40 @@ def test_parse_dependencies_rejects_local_secret_mode_conflict() -> None:
         )
 
 
+def test_parse_dependencies_inject_as_optional() -> None:
+    deps = parse_artifact_dependencies(
+        {
+            "env": {
+                "MY_STRIPE_KEY": {
+                    "inject_as": "STRIPE_SECRET_KEY",
+                    "secret": {
+                        "provider": "op",
+                        "ref": "op://Vault/Item/STRIPE_LIVE",
+                    },
+                }
+            }
+        },
+        context="test",
+    ).env
+    assert deps["MY_STRIPE_KEY"].inject_as == "STRIPE_SECRET_KEY"
+    assert deps["MY_STRIPE_KEY"].secret_ref == "op://Vault/Item/STRIPE_LIVE"
+
+
+def test_parse_dependencies_rejects_invalid_inject_as() -> None:
+    with pytest.raises(RuntimeError, match="inject_as must match"):
+        parse_artifact_dependencies(
+            {
+                "env": {
+                    "KEY": {
+                        "inject_as": "bad-name",
+                        "secret": {"provider": "op", "ref": "op://Vault/Item/K"},
+                    }
+                }
+            },
+            context="test",
+        )
+
+
 def test_read_existing_env_file_with_values(tmp_path: Path) -> None:
     (tmp_path / ".env.ai-sync").write_text("A=1\nB=hello\n", encoding="utf-8")
     result = _service().read_existing_env_file(tmp_path)
