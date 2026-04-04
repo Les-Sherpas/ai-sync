@@ -83,7 +83,5 @@ Do not manually edit content inside managed marker blocks.
 <!-- BEGIN ai-sync:rules-index -->
 ## ai-sync Rules (managed)
 
-You MUST read and follow ALL rules listed below:
-
-- [commit-conventions](.ai-sync/rules/sherpas-commit-conventions.md)
+You MUST read and follow ALL rule files in the `.ai-sync/rules/` directory.
 <!-- END ai-sync:rules-index -->
