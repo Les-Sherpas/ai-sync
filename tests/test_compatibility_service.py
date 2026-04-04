@@ -35,7 +35,7 @@ def _resolved_source(alias: str, root: Path, version: str | None = None) -> Reso
 
 def test_check_manifest_schema_supported_passes() -> None:
     service = _make_service()
-    manifest = ProjectManifest(schema_version=1)
+    manifest = ProjectManifest(schema_version=2)
     service.check_manifest_schema(manifest)
 
 
