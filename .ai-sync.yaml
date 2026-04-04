@@ -2,7 +2,7 @@ schema_version: 2
 sources:
   base:
     source: git@github.com:Ephasme/ai-sync-config-base.git
-    version: v1.3.0
+    version: v1.4.0
 agents:
   - base/cloud_infrastructure_engineer
   - base/git_history_architect
