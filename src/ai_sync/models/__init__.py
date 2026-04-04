@@ -18,6 +18,7 @@ from ai_sync.models.project_manifest import (
     DEFAULT_PROJECT_MANIFEST_FILENAME,
     LOCAL_PROJECT_MANIFEST_FILENAME,
     PROJECT_MANIFEST_FILENAMES,
+    SUPPORTED_MANIFEST_SCHEMAS,
     ProjectManifest,
     split_scoped_ref,
 )
@@ -37,6 +38,7 @@ __all__ = [
     "OAuthOverrideConfig",
     "PLAN_SCHEMA_VERSION",
     "PROJECT_MANIFEST_FILENAMES",
+    "SUPPORTED_MANIFEST_SCHEMAS",
     "PlanAction",
     "PlanSource",
     "ProjectManifest",

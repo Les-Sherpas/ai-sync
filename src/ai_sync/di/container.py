@@ -18,6 +18,7 @@ from ai_sync.services.artifact_bundle_service import ArtifactBundleService
 from ai_sync.services.artifact_preparation_service import ArtifactPreparationService
 from ai_sync.services.artifact_service import ArtifactService
 from ai_sync.services.command_artifact_service import CommandArtifactService
+from ai_sync.services.compatibility_service import CompatibilityService
 from ai_sync.services.config_store_service import ConfigStoreService
 from ai_sync.services.doctor_service import DoctorService
 from ai_sync.services.environment_service import EnvironmentService
@@ -98,6 +99,10 @@ class AppContainer(containers.DeclarativeContainer):
     project_manifest_service = providers.Singleton(ProjectManifestService)
     mcp_preparation_service = providers.Singleton(McpPreparationService)
     tool_version_service = providers.Singleton(ToolVersionService)
+    compatibility_service = providers.Singleton(
+        CompatibilityService,
+        tool_version_service=tool_version_service,
+    )
     tool_requirement_service = providers.Singleton(
         ToolRequirementService,
         version_check_service=tool_version_service,
@@ -176,7 +181,7 @@ class AppContainer(containers.DeclarativeContainer):
         plan_builder_service=plan_builder_service,
         plan_persistence_service=plan_persistence_service,
         config_store_service=config_store_service,
-        tool_version_service=tool_version_service,
+        compatibility_service=compatibility_service,
     )
 
     install_service = providers.Factory(
@@ -195,7 +200,6 @@ class AppContainer(containers.DeclarativeContainer):
         plan_persistence_service=plan_persistence_service,
         project_locator_service=project_locator_service,
         config_store_service=config_store_service,
-        tool_version_service=tool_version_service,
         stdin=runtime_stdin,
         prompt_input=prompt_input,
     )

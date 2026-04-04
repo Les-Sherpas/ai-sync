@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from ai_sync.data_classes.plan_context import PlanContext
 from ai_sync.services.artifact_preparation_service import ArtifactPreparationService
+from ai_sync.services.compatibility_service import CompatibilityService
 from ai_sync.services.config_store_service import ConfigStoreService
 from ai_sync.services.display_service import DisplayService
 from ai_sync.services.plan_builder_service import PlanBuilderService
@@ -16,10 +17,6 @@ from ai_sync.services.project_locator_service import ProjectLocatorService
 from ai_sync.services.project_manifest_service import ProjectManifestService
 from ai_sync.services.source_resolver_service import SourceResolverService
 from ai_sync.services.tool_requirement_service import ToolRequirementService
-from ai_sync.services.tool_version_service import ToolVersionService
-
-if TYPE_CHECKING:
-    pass
 
 
 class PlanService:
@@ -36,7 +33,7 @@ class PlanService:
         plan_builder_service: PlanBuilderService,
         plan_persistence_service: PlanPersistenceService,
         config_store_service: ConfigStoreService,
-        tool_version_service: ToolVersionService,
+        compatibility_service: CompatibilityService,
         validate_client_settings_fn: Callable[[dict[str, Any]], list[str]] | None = None,
     ) -> None:
         from ai_sync.helpers import validate_client_settings
@@ -49,7 +46,7 @@ class PlanService:
         self._plan_builder_service = plan_builder_service
         self._plan_persistence_service = plan_persistence_service
         self._config_store_service = config_store_service
-        self._tool_version_service = tool_version_service
+        self._compatibility_service = compatibility_service
         self._validate_client_settings = validate_client_settings_fn or validate_client_settings
 
     def run(self, *, config_root: Path, display: DisplayService, out: str | None) -> int:
@@ -73,10 +70,15 @@ class PlanService:
         self, project_root: Path, config_root: Path | None, display: DisplayService
     ) -> PlanContext:
         """Build PlanContext inputs and delegate action planning to PlanBuilderService."""
+        self._compatibility_service.check_client_versions(display)
+
         manifest_path = self._project_manifest_service.resolve_project_manifest_path(project_root)
         manifest = self._project_manifest_service.resolve_project_manifest(project_root)
         manifest_hash = self._project_manifest_service.manifest_fingerprint(manifest_path)
+        self._compatibility_service.check_manifest_schema(manifest)
+
         resolved_sources = self._source_resolver_service.resolve_sources(project_root, manifest)
+        self._compatibility_service.check_source_compatibility(resolved_sources)
 
         errors = self._validate_client_settings(manifest.settings)
         if errors:
@@ -134,7 +136,6 @@ class PlanService:
             )
             return None
 
-        self._warn_on_client_version_drift(display)
         context = self.assemble_plan_context(project_root, config_root, display)
         return (project_root, context)
 
@@ -143,9 +144,3 @@ class PlanService:
             return True
         display.panel("Run `ai-sync install` first.", title="Not set up", style="error")
         return False
-
-    def _warn_on_client_version_drift(self, display: DisplayService) -> None:
-        versions_path = self._tool_version_service.get_default_versions_path()
-        ok, message = self._tool_version_service.check_client_versions(versions_path)
-        if not ok or message != "OK":
-            display.print(f"Warning: {message}", style="warning")

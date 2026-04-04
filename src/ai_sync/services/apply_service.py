@@ -15,7 +15,6 @@ from ai_sync.services.git_safety_service import GitSafetyService
 from ai_sync.services.managed_output_service import ManagedOutputService
 from ai_sync.services.plan_persistence_service import PlanPersistenceService
 from ai_sync.services.project_locator_service import ProjectLocatorService
-from ai_sync.services.tool_version_service import ToolVersionService
 
 if TYPE_CHECKING:
     from ai_sync.data_classes.artifact import Artifact
@@ -36,7 +35,6 @@ class ApplyService:
         plan_persistence_service: PlanPersistenceService,
         project_locator_service: ProjectLocatorService,
         config_store_service: ConfigStoreService,
-        tool_version_service: ToolVersionService,
         stdin: TextIO | None = None,
         prompt_input: Callable[[str], str] = input,
     ) -> None:
@@ -46,7 +44,6 @@ class ApplyService:
         self._plan_persistence_service = plan_persistence_service
         self._project_locator_service = project_locator_service
         self._config_store_service = config_store_service
-        self._tool_version_service = tool_version_service
         self._stdin = sys.stdin if stdin is None else stdin
         self._prompt_input = prompt_input
 
@@ -64,7 +61,6 @@ class ApplyService:
             )
             return 1
 
-        self._warn_on_client_version_drift(display)
         plan_context = self._plan_service.assemble_plan_context(
             project_root, config_root, display
         )
@@ -219,9 +215,3 @@ class ApplyService:
             return True
         display.panel("Run `ai-sync install` first.", title="Not set up", style="error")
         return False
-
-    def _warn_on_client_version_drift(self, display: DisplayService) -> None:
-        versions_path = self._tool_version_service.get_default_versions_path()
-        ok, message = self._tool_version_service.check_client_versions(versions_path)
-        if not ok or message != "OK":
-            display.print(f"Warning: {message}", style="warning")

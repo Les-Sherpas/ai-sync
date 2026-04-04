@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from ai_sync.models.source_config import SourceConfig
 
 ALIAS_RE = re.compile(r"^[a-z0-9]([a-z0-9-]*[a-z0-9])?$")
+SUPPORTED_MANIFEST_SCHEMAS: set[int] = {1}
 DEFAULT_PROJECT_MANIFEST_FILENAME = ".ai-sync.yaml"
 LOCAL_PROJECT_MANIFEST_FILENAME = ".ai-sync.local.yaml"
 PROJECT_MANIFEST_FILENAMES = (
@@ -21,6 +22,7 @@ PROJECT_MANIFEST_FILENAMES = (
 class ProjectManifest(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
+    schema_version: int = 1
     sources: dict[str, SourceConfig] = Field(default_factory=dict)
     agents: list[str] = Field(default_factory=list)
     skills: list[str] = Field(default_factory=list)

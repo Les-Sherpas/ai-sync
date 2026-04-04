@@ -12,12 +12,15 @@ from .di import bootstrap_runtime
 from .services.error_handler_service import LOG_FILENAME
 from .services.plain_display_service import PlainDisplayService
 from .services.rich_display_service import RichDisplayService
+from .version import get_ai_sync_version
 
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
+        prog="ai-sync",
         description="Sync AI configs (agents, skills, commands, rules, MCP servers) per-project.",
     )
+    parser.add_argument("--version", action="version", version=f"ai-sync {get_ai_sync_version()}")
     subparsers = parser.add_subparsers(dest="command")
 
     install_parser = subparsers.add_parser(
