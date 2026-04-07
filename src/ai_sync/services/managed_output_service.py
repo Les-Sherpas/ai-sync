@@ -535,7 +535,7 @@ class ManagedOutputService:
             frontmatter, body = self._split_frontmatter(block_body)
             if frontmatter is not None:
                 body = body.lstrip("\n")
-                block = f"{begin}\n{body.rstrip()}\n{end}"
+                block = f"{begin}\n{body}{end}"
                 pattern = re.compile(rf"{re.escape(begin)}.*?{re.escape(end)}", re.DOTALL)
                 if pattern.search(content):
                     replaced = pattern.sub(lambda _: block, content)
@@ -557,7 +557,7 @@ class ManagedOutputService:
                     return content.rstrip() + "\n\n" + f"{frontmatter}\n\n{block}\n"
                 return f"{frontmatter}\n\n{block}\n"
 
-        block = f"{begin}\n{block_body.rstrip()}\n{end}"
+        block = f"{begin}\n{block_body}{end}"
         pattern = re.compile(rf"{re.escape(begin)}.*?{re.escape(end)}", re.DOTALL)
         if pattern.search(content):
             return pattern.sub(lambda _: block, content)
